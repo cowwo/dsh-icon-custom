@@ -1,0 +1,4 @@
+# dsh-icon-custom bundle patch: insert the plugin into a profile's layer stack.
+- insert:
+    - id: icon-custom
+      name: 'dsh-icon-custom'

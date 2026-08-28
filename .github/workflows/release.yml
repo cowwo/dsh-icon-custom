@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write   # 需要写权限才能创建 GitHub Release
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Install deps
+        run: npm ci || pnpm install --no-frozen-lockfile
+
+      # 1. 发布裸名版 dsh-icon-custom（让别人用短名装）
+      - name: Publish dsh-icon-custom
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # 2. 临时把包名改成 @cowwo 的 scoped 版再发一次
+      - name: Publish @cowwo/dsh-icon-custom
+        run: |
+          npm pkg set name=@cowwo/dsh-icon-custom
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # 3. 自动创建 GitHub Release 版本页（写进安装命令）
+      - name: Create GitHub Release
+        run: |
+          cat > release-notes.md <<'EOF'
+          ## 安装
+
+          ```sh
+          dsh plugin --profile web add dsh-icon-custom
+          ```
+
+          也可用 scoped 名：`@cowwo/dsh-icon-custom`。
+
+          - 在 设置 → icon管理 上传自定义浏览器标签页图标
+          - 支持 SVG / PNG / ICO，立即生效并持久保存
+          EOF
+          gh release create ${GITHUB_REF_NAME} --title "${GITHUB_REF_NAME}" --notes-file release-notes.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
