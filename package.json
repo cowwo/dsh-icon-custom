@@ -31,7 +31,7 @@
     "@deepseek-ai/dsh-client-locale": "*",
     "@deepseek-ai/dsh-client-runtime": "*",
     "@deepseek-ai/dsh-typert-protocol": "*",
-    "zod": "*"
+    "zod": "^4.4.3"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {
