@@ -1,6 +1,6 @@
 {
   "name": "dsh-icon-custom",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "自定义浏览器标签页图标:在设置页上传 SVG/PNG/ICO,立即生效并持久保存。· Custom browser tab favicon: upload SVG/PNG/ICO from the settings page, applies instantly and persists.",
   "type": "module",
   "main": "lib/index.js",
@@ -57,6 +57,7 @@
     "lib",
     "client",
     "cordis.patch.yml",
+    "docs/pwa-option.png",
     "README.md",
     "README.zh.md",
     "LICENSE"

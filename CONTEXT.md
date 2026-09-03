@@ -43,3 +43,19 @@ _Avoid_: 图库、历史记录
 **格式魔数识别 (content sniffing)**:
 根据文件内容的固定字节(而非文件扩展名或声明的 mime)判断真实格式,并容忍个别前导字节。SVG 同时做安全拦截。
 _Avoid_: 按后缀判断、看 mime 判断
+
+**PWA 安装图标 (PWA install icon)**:
+网页「安装为应用 / 添加到主屏幕」后,桌面与启动器上显示的图标;由站点 web app manifest(`/manifest.webmanifest`)的 `icons` 数组决定,和标签页 favicon 是两回事。
+_Avoid_: App 图标、桌面图标
+
+**平台 manifest (platform manifest)**:
+DSH 前端随发行版内置的 PWA 清单(`@deepseek-ai/dsh-web-frontend/dist/manifest.webmanifest`);未启用 PWA 选项时原样透传,启用时只改写其 `icons` 数组。
+_Avoid_: manifest 文件、清单
+
+**PWA 图标选项 (pwa option)**:
+图标记录上的 `pwa` 标记(默认 false);为 true 时,当前生效图标同时替换平台 manifest 中的 PWA 安装图标。
+_Avoid_: PWA 开关、pwaEnabled 状态
+
+**apple-touch-icon**:
+index.html 中针对 iOS「添加到主屏幕」的图标链接;iOS 只接受 PNG,不支持 SVG。
+_Avoid_: 触摸图标

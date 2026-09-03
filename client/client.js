@@ -25,6 +25,9 @@ window.__ModuleLoader__.load({
 			updated: "更新时间",
 			successUpload: "已应用新图标",
 			successReset: "已恢复默认图标",
+			pwa: "同时替换 PWA 安装图标",
+			pwaHint: "安装为应用(添加到主屏幕)后,桌面上的图标也换成这张;已安装的应用可能需要重新安装才会更新。",
+			successPwa: "PWA 图标设置已更新",
 			fail: "操作失败",
 			noFile: "请先选择图标文件"
 		};
@@ -44,6 +47,9 @@ window.__ModuleLoader__.load({
 			updated: "Updated",
 			successUpload: "New icon applied",
 			successReset: "Default icon restored",
+			pwa: "Also replace the PWA app icon",
+			pwaHint: "The icon used after installing the site as an app (add to home screen). Already-installed apps may need a reinstall to pick it up.",
+			successPwa: "PWA icon setting updated",
 			fail: "Operation failed",
 			noFile: "Choose a file first"
 		};
@@ -73,6 +79,7 @@ window.__ModuleLoader__.load({
 			const t = props.t;
 			const rpc = props.rpc;
 			const [status, setStatus] = React.useState(null);
+			const [pwaEnabled, setPwaEnabled] = React.useState(false);
 			const [busy, setBusy] = React.useState(false);
 			const [error, setError] = React.useState("");
 			const [notice, setNotice] = React.useState("");
@@ -81,8 +88,10 @@ window.__ModuleLoader__.load({
 			const load = React.useCallback(async () => {
 				try {
 					const resp = await rpc.call("/api", "iconCustom/getStatus", { args: {} });
-					if (resp && resp.ok === true) setStatus(resp.value);
-					else setError(reason(resp, t("fail")));
+					if (resp && resp.ok === true) {
+						setStatus(resp.value);
+						setPwaEnabled(resp.value.pwa === true);
+					} else setError(reason(resp, t("fail")));
 				} catch (e) {
 					setError(String((e && e.message) || e || t("fail")));
 				}
@@ -138,10 +147,11 @@ window.__ModuleLoader__.load({
 					setBusy(true);
 					try {
 						const resp = await rpc.call("/api", "iconCustom/setIcon", {
-							args: { request: { mime: file.type || "image/svg+xml", name: file.name, data } }
+							args: { request: { mime: file.type || "image/svg+xml", name: file.name, pwa: pwaEnabled, data } }
 						});
 						if (resp && resp.ok === true) {
 							setStatus(resp.value);
+							setPwaEnabled(resp.value.pwa === true);
 							setNotice(t("successUpload"));
 							applyLive(resp.value);
 						} else {
@@ -155,7 +165,7 @@ window.__ModuleLoader__.load({
 				};
 				reader.onerror = () => setError(t("fail"));
 				reader.readAsDataURL(file);
-			}, [rpc, t, applyLive]);
+			}, [rpc, t, pwaEnabled, applyLive]);
 
 			const onReset = React.useCallback(async () => {
 				setError("");
@@ -165,6 +175,7 @@ window.__ModuleLoader__.load({
 					const resp = await rpc.call("/api", "iconCustom/resetIcon", { args: {} });
 					if (resp && resp.ok === true) {
 						setStatus(resp.value);
+						setPwaEnabled(false);
 						setNotice(t("successReset"));
 						applyDefault();
 					} else {
@@ -176,6 +187,32 @@ window.__ModuleLoader__.load({
 					setBusy(false);
 				}
 			}, [rpc, t, applyDefault]);
+
+			const onTogglePwa = React.useCallback(async (event) => {
+				const enabled = event.target.checked === true;
+				setError("");
+				setNotice("");
+				setBusy(true);
+				try {
+					const resp = await rpc.call("/api", "iconCustom/setPwa", {
+						args: { request: { enabled } }
+					});
+					if (resp && resp.ok === true) {
+						setStatus(resp.value);
+						setPwaEnabled(resp.value.pwa === true);
+						setNotice(t("successPwa"));
+						applyLive(resp.value);
+					} else {
+						setPwaEnabled(!enabled);
+						setError(reason(resp, t("fail")));
+					}
+				} catch (e) {
+					setPwaEnabled(!enabled);
+					setError(String((e && e.message) || e || t("fail")));
+				} finally {
+					setBusy(false);
+				}
+			}, [rpc, t, applyLive]);
 
 			const active = status && status.active === true;
 			const previewSrc = active ? `/icon-custom.svg?v=${status.rev}` : "/favicon.svg";
@@ -216,6 +253,11 @@ window.__ModuleLoader__.load({
 					),
 					React.createElement("input", { ref: inputRef, type: "file", accept: ".svg,.png,.ico,.cur,image/svg+xml,image/png,image/x-icon", style: { display: "none" }, onChange: onFileChange })
 				),
+				React.createElement("label", { style: { display: "flex", alignItems: "center", gap: "8px", padding: "10px 0 0", fontSize: 12, color: "var(--dsw-alias-label-primary)", cursor: busy ? "default" : "pointer" } },
+					React.createElement("input", { type: "checkbox", checked: pwaEnabled, disabled: busy || !active, onChange: onTogglePwa, style: { cursor: busy ? "default" : "pointer" } }),
+					React.createElement("span", null, t("pwa"))
+				),
+				React.createElement("div", { style: style.hint }, t("pwaHint")),
 				React.createElement("div", { style: style.hint }, t("uploadHint")),
 				React.createElement("div", { style: style.hint }, t("resetHint")),
 				notice ? React.createElement("div", { style: style.notice }, notice) : null,
