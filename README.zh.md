@@ -29,6 +29,16 @@ dsh plugin --profile web add dsh-icon-custom
 
 ![PWA 安装对话框](./docs/install-dialog.png)
 
+## 页面 Logo 图标
+
+勾选**同时替换页面 Logo 图标**,网页左上角品牌 logo 里的**鲸鱼图标**就会换成你上传的这张——`deepseek HARNESS` 文字不受影响。选项关闭时显示官方鲸鱼;改动立即生效,刷新/重启都保留。
+
+说明:
+
+- 该选项**默认不勾选**。
+- 上传后随时可以勾选/取消,不用重新上传文件。
+- 只影响侧边栏的品牌图标(deepseek HARNESS 旁边那只);PWA 安装图标是上面的另一个选项。
+
 说明:
 
 - 该选项**默认不勾选**:不勾选时行为与之前完全一致,平台 manifest 原样透传。

@@ -29,6 +29,16 @@ When the site is installed as an app, the browser's install dialog picks the cus
 
 ![PWA install dialog](./docs/install-dialog.png)
 
+## Page logo mark
+
+Tick **同时替换页面 Logo 图标** to also replace the whale mark at the top-left of the DSH page — the mark beside the `deepseek HARNESS` brand name. The brand **text is untouched**; the mark falls back to the official whale while the option is off. The change applies instantly and persists across reloads/restarts.
+
+Notes:
+
+- The option is **off by default**.
+- It can be toggled at any time after upload — no re-upload needed.
+- This only affects the sidebar brand mark (the one next to `deepseek HARNESS`); PWA/installed-app icons are a separate option above.
+
 Notes:
 
 - The option is **off by default**: without it, behavior is identical to before and the platform manifest is served verbatim.

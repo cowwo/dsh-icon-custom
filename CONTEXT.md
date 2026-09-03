@@ -59,3 +59,15 @@ _Avoid_: PWA 开关、pwaEnabled 状态
 **apple-touch-icon**:
 index.html 中针对 iOS「添加到主屏幕」的图标链接;iOS 只接受 PNG,不支持 SVG。
 _Avoid_: 触摸图标
+
+**页面 Logo 图标 (page logo mark)**:
+网页界面左上角品牌 logo 里的鲸鱼图标(侧边栏 `sidebar.brand.mark` 席位);替换它不影响 `deepseek HARNESS` 文字。
+_Avoid_: 顶部图、标题图标
+
+**品牌文字 (brand name)**:
+左上角 `deepseek HARNESS` 字样,与鲸鱼图标是两个独立席位;本插件只替换图标席位。
+_Avoid_: 标题文字、logo 全称
+
+**页面 Logo 选项 (logo option)**:
+图标记录上的 `logo` 标记(默认 false);为 true 时,当前生效图标同时替换侧边栏品牌鲸鱼图标。
+_Avoid_: logo 开关、logoEnabled 状态

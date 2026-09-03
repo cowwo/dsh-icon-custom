@@ -28,6 +28,9 @@ window.__ModuleLoader__.load({
 			pwa: "同时替换 PWA 安装图标",
 			pwaHint: "安装为应用(添加到主屏幕)后,桌面上的图标也换成这张;已安装的应用可能需要重新安装才会更新。",
 			successPwa: "PWA 图标设置已更新",
+			logo: "同时替换页面 Logo 图标",
+			logoHint: "把网页左上角品牌 logo 里的鲸鱼图标换成这张(不影响 deepseek HARNESS 文字)。",
+			successLogo: "页面 Logo 已更新",
 			fail: "操作失败",
 			noFile: "请先选择图标文件"
 		};
@@ -50,6 +53,9 @@ window.__ModuleLoader__.load({
 			pwa: "Also replace the PWA app icon",
 			pwaHint: "The icon used after installing the site as an app (add to home screen). Already-installed apps may need a reinstall to pick it up.",
 			successPwa: "PWA icon setting updated",
+			logo: "Also replace the page logo mark",
+			logoHint: "Replaces the whale mark beside the brand name in the top-left (the deepseek HARNESS text stays).",
+			successLogo: "Page logo updated",
 			fail: "Operation failed",
 			noFile: "Choose a file first"
 		};
@@ -72,14 +78,60 @@ window.__ModuleLoader__.load({
 				return new Date(ms).toLocaleString();
 			} catch { return "—"; }
 		}
+		// In-package brand-mark bridge: the settings section pushes the current
+		// logo state here; the sidebar brand-mark component subscribes to it.
+		// Both live in this same module — no RPC loop, no cross-package events.
+		const logoListeners = new Set();
+		function emitLogo(value) {
+			logoListeners.forEach((fn) => { try { fn(value); } catch {} });
+		}
+		function subscribeLogo(fn) {
+			logoListeners.add(fn);
+			return () => { logoListeners.delete(fn); };
+		}
+		function syncLogo(status) {
+			emitLogo({
+				enabled: status !== null && typeof status === "object" && status.active === true && status.logo === true,
+				rev: status && status.rev ? status.rev : null
+			});
+		}
 		//#endregion
 
-		//#region component
+		//#region components
+		/**
+		 * Sidebar brand-mark occupant (registered on the official
+		 * `sidebar.brand.mark` single seat). Shows the custom icon when the
+		 * logo option is on; otherwise falls back to the platform favicon mark
+		 * (/favicon.svg is the same official whale). The brand NAME text is not
+		 * touched — this seat is only the mark.
+		 */
+		function BrandMark(props) {
+			const [state, setState] = React.useState(null);
+			React.useEffect(() => {
+				const unsubscribe = subscribeLogo(setState);
+				// Pull the current state on mount too, so the mark is correct
+				// even when the settings panel was never opened this session.
+				props.rpc.call("/api", "iconCustom/getStatus", { args: {} })
+					.then((resp) => { if (resp && resp.ok === true) syncLogo(resp.value); })
+					.catch(() => {});
+				return unsubscribe;
+			}, [props.rpc]);
+			const size = (props && props.size) || 24;
+			const custom = state && state.enabled === true && state.rev;
+			const style = { width: size, height: size, objectFit: "contain", display: "block" };
+			return React.createElement("img", {
+				src: custom ? `/icon-custom.svg?v=${state.rev}` : "/favicon.svg",
+				alt: "",
+				style
+			});
+		}
+
 		function FaviconSection(props) {
 			const t = props.t;
 			const rpc = props.rpc;
 			const [status, setStatus] = React.useState(null);
 			const [pwaEnabled, setPwaEnabled] = React.useState(false);
+			const [logoEnabled, setLogoEnabled] = React.useState(false);
 			const [busy, setBusy] = React.useState(false);
 			const [error, setError] = React.useState("");
 			const [notice, setNotice] = React.useState("");
@@ -91,6 +143,8 @@ window.__ModuleLoader__.load({
 					if (resp && resp.ok === true) {
 						setStatus(resp.value);
 						setPwaEnabled(resp.value.pwa === true);
+						setLogoEnabled(resp.value.logo === true);
+						syncLogo(resp.value);
 					} else setError(reason(resp, t("fail")));
 				} catch (e) {
 					setError(String((e && e.message) || e || t("fail")));
@@ -147,13 +201,15 @@ window.__ModuleLoader__.load({
 					setBusy(true);
 					try {
 						const resp = await rpc.call("/api", "iconCustom/setIcon", {
-							args: { request: { mime: file.type || "image/svg+xml", name: file.name, pwa: pwaEnabled, data } }
+							args: { request: { mime: file.type || "image/svg+xml", name: file.name, pwa: pwaEnabled, logo: logoEnabled, data } }
 						});
 						if (resp && resp.ok === true) {
 							setStatus(resp.value);
 							setPwaEnabled(resp.value.pwa === true);
+							setLogoEnabled(resp.value.logo === true);
 							setNotice(t("successUpload"));
 							applyLive(resp.value);
+							syncLogo(resp.value);
 						} else {
 							setError(reason(resp, t("fail")));
 						}
@@ -165,7 +221,7 @@ window.__ModuleLoader__.load({
 				};
 				reader.onerror = () => setError(t("fail"));
 				reader.readAsDataURL(file);
-			}, [rpc, t, pwaEnabled, applyLive]);
+			}, [rpc, t, pwaEnabled, logoEnabled, applyLive]);
 
 			const onReset = React.useCallback(async () => {
 				setError("");
@@ -176,8 +232,10 @@ window.__ModuleLoader__.load({
 					if (resp && resp.ok === true) {
 						setStatus(resp.value);
 						setPwaEnabled(false);
+						setLogoEnabled(false);
 						setNotice(t("successReset"));
 						applyDefault();
+						syncLogo(resp.value);
 					} else {
 						setError(reason(resp, t("fail")));
 					}
@@ -213,6 +271,32 @@ window.__ModuleLoader__.load({
 					setBusy(false);
 				}
 			}, [rpc, t, applyLive]);
+
+			const onToggleLogo = React.useCallback(async (event) => {
+				const enabled = event.target.checked === true;
+				setError("");
+				setNotice("");
+				setBusy(true);
+				try {
+					const resp = await rpc.call("/api", "iconCustom/setLogo", {
+						args: { request: { enabled } }
+					});
+					if (resp && resp.ok === true) {
+						setStatus(resp.value);
+						setLogoEnabled(resp.value.logo === true);
+						setNotice(t("successLogo"));
+						syncLogo(resp.value);
+					} else {
+						setLogoEnabled(!enabled);
+						setError(reason(resp, t("fail")));
+					}
+				} catch (e) {
+					setLogoEnabled(!enabled);
+					setError(String((e && e.message) || e || t("fail")));
+				} finally {
+					setBusy(false);
+				}
+			}, [rpc, t]);
 
 			const active = status && status.active === true;
 			const previewSrc = active ? `/icon-custom.svg?v=${status.rev}` : "/favicon.svg";
@@ -258,6 +342,11 @@ window.__ModuleLoader__.load({
 					React.createElement("span", null, t("pwa"))
 				),
 				React.createElement("div", { style: style.hint }, t("pwaHint")),
+				React.createElement("label", { style: { display: "flex", alignItems: "center", gap: "8px", padding: "10px 0 0", fontSize: 12, color: "var(--dsw-alias-label-primary)", cursor: busy ? "default" : "pointer" } },
+					React.createElement("input", { type: "checkbox", checked: logoEnabled, disabled: busy || !active, onChange: onToggleLogo, style: { cursor: busy ? "default" : "pointer" } }),
+					React.createElement("span", null, t("logo"))
+				),
+				React.createElement("div", { style: style.hint }, t("logoHint")),
 				React.createElement("div", { style: style.hint }, t("uploadHint")),
 				React.createElement("div", { style: style.hint }, t("resetHint")),
 				notice ? React.createElement("div", { style: style.notice }, notice) : null,
@@ -271,6 +360,11 @@ window.__ModuleLoader__.load({
 			ctx.effect(() => ctx.locale.register(NS, { zh, en }), "dsh-icon-custom: dictionaries");
 			const t = ctx.locale.bind(NS);
 			const rpc = ctx.connection.rpc;
+			// Brand-mark seat: replaces only the whale mark (verified: a
+			// third-party registration wins over the official occupant and the
+			// official package's mark steps aside). The brand NAME text is a
+			// separate seat and is left untouched.
+			ctx.slots.inject("sidebar.brand.mark", () => ctx.slots.register({ name: "sidebar.brand.mark" }, (props) => React.createElement(BrandMark, { ...props, rpc })));
 			ctx.slots.inject("settings.section", () => ctx.slots.register({
 				name: "settings.section",
 				id: "favicon",
