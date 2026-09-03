@@ -1,4 +1,4 @@
-# dsh-favicon-custom
+# dsh-icon-custom
 
 一个 DSH 插件,让用户在设置页上传一张自定义标签页图标(SVG / PNG / ICO),替换浏览器的默认 favicon;上传后当前标签页立即生效,并跨刷新/重启保留。存储在每用户自己的 `$DSH_HOME` 下,面向“将来做成图标库”预留结构。
 
@@ -71,3 +71,19 @@ _Avoid_: 标题文字、logo 全称
 **页面 Logo 选项 (logo option)**:
 图标记录上的 `logo` 标记(默认 false);为 true 时,当前生效图标同时替换侧边栏品牌鲸鱼图标。
 _Avoid_: logo 开关、logoEnabled 状态
+
+**PNG 基准 (PNG baseline)**:
+从上传的任意格式归一化出的一个可用 PNG 字节串(SVG 由浏览器 canvas 栅格化,ICO 由后端提取内嵌 PNG,PNG/JPEG 直接透传)。它是派生态和 PWA/logo 渲染的共同输入;`status.png` 为 true 时代表已有。
+_Avoid_: 原图、源文件
+
+**派生图 (derived icons)**:
+后端用 Jimp 从 PNG 基准生成的 `library/<id>.derived/` 下的一组标准尺寸 PNG:`192`(`any`)、`512`(`any`)、`512-maskable`(不透明背景)、`apple-180`(180×180,不透明),用于安卓 manifest 条目与 iOS 触屏图标。
+_Avoid_: 缩略图、裁剪图
+
+**maskable 图标**:
+PWA 清单里 `purpose: "maskable"` 的图标,Android 启动器会把它按设备密度裁成圆角/圆形;插件用不透明白底填充,确保裁剪干净。
+_Avoid_: 圆形图标、自适应图标
+
+**派生失败回退 (derivation fallback)**:
+当某个图标无法被栅格化(如仅含 BMP 帧的老式 ICO)或 Jimp 解码出错时,不阻塞上传——记录 `derived: false`、`pngBaseline: null`,回退为「原样透传」,favicon 照常工作,仅多尺寸 PWA/logo 集合不生效。
+_Avoid_: 报错、放弃

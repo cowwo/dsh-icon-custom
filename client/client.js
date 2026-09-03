@@ -14,7 +14,8 @@ window.__ModuleLoader__.load({
 			current: "当前图标",
 			none: "使用平台默认图标",
 			upload: "上传图标",
-			uploadHint: "支持 SVG、PNG、ICO,最大 10 MB。上传后立即生效,刷新页面也会保留。",
+			uploadHint: "支持 SVG、PNG、ICO,最大 10 MB。SVG 会自动转成 PNG,自动适配安卓/iOS/平板的主屏图标。上传后立即生效,刷新页面也会保留。",
+			svgFail: "该 SVG 无法转换,请改用 PNG。",
 			reset: "恢复默认",
 			resetHint: "清除自定义图标并回到平台默认图标。",
 			replace: "替换",
@@ -39,7 +40,8 @@ window.__ModuleLoader__.load({
 			current: "Current icon",
 			none: "Using the platform default icon",
 			upload: "Upload",
-			uploadHint: "SVG, PNG or ICO, up to 10 MB. Applies instantly and persists across reloads.",
+			uploadHint: "SVG, PNG or ICO, up to 10 MB. SVG is auto-rasterized to PNG, and sizes are derived to fit Android/iOS/tablet home-screen icons. Applies instantly and persists across reloads.",
+			svgFail: "This SVG could not be rasterized. Use a PNG instead.",
 			reset: "Reset",
 			resetHint: "Clear the custom icon and use the platform default.",
 			replace: "Replace",
@@ -78,6 +80,39 @@ window.__ModuleLoader__.load({
 				return new Date(ms).toLocaleString();
 			} catch { return "—"; }
 		}
+		// Rasterize an SVG file to a 512x512 PNG data URL in the browser.
+		// We do this on the client because (a) browsers rasterize SVG reliably,
+		// and (b) the host's pure-JS Jimp cannot decode SVG. ICO is NOT handled
+		// here — browsers do not reliably draw .ico into a canvas, so the host
+		// extracts the embedded PNG instead. Returns a `data:image/png;base64,..`
+		// string, or throws when the SVG cannot be rasterized.
+		function svgToPng(file) {
+			return new Promise((resolve, reject) => {
+				const url = URL.createObjectURL(file);
+				const img = new Image();
+				img.onload = () => {
+					try {
+						const size = 512;
+						const canvas = document.createElement("canvas");
+						canvas.width = size;
+						canvas.height = size;
+						const ctx = canvas.getContext("2d");
+						ctx.fillStyle = "#fff"; // opaque backdrop for iOS tiles
+						ctx.fillRect(0, 0, size, size);
+						const scale = Math.min(size / img.width, size / img.height);
+						const w = img.width * scale, h = img.height * scale;
+						ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+						resolve(canvas.toDataURL("image/png"));
+					} catch (e) {
+						reject(e);
+					} finally {
+						URL.revokeObjectURL(url);
+					}
+				};
+				img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("svg-rasterize")); };
+				img.src = url;
+			});
+		}
 		// In-package brand-mark bridge: the settings section pushes the current
 		// logo state here; the sidebar brand-mark component subscribes to it.
 		// Both live in this same module — no RPC loop, no cross-package events.
@@ -92,7 +127,8 @@ window.__ModuleLoader__.load({
 		function syncLogo(status) {
 			emitLogo({
 				enabled: status !== null && typeof status === "object" && status.active === true && status.logo === true,
-				rev: status && status.rev ? status.rev : null
+				rev: status && status.rev ? status.rev : null,
+				png: !!(status && typeof status === "object" && status.png === true)
 			});
 		}
 		//#endregion
@@ -119,8 +155,11 @@ window.__ModuleLoader__.load({
 			const size = (props && props.size) || 24;
 			const custom = state && state.enabled === true && state.rev;
 			const style = { width: size, height: size, objectFit: "contain", display: "block" };
+			const src = custom
+				? (state.png === true ? `/icon-custom-192.png?v=${state.rev}` : `/icon-custom.svg?v=${state.rev}`)
+				: "/favicon.svg";
 			return React.createElement("img", {
-				src: custom ? `/icon-custom.svg?v=${state.rev}` : "/favicon.svg",
+				src,
 				alt: "",
 				style
 			});
@@ -160,14 +199,15 @@ window.__ModuleLoader__.load({
 			const applyLive = React.useCallback((s) => {
 				if (!s || s.active !== true) return;
 				const link = document.querySelector('link[rel="icon"]');
-				const href = `/icon-custom.svg?v=${s.rev}`;
+				const href = s.png === true ? `/icon-custom-192.png?v=${s.rev}` : `/icon-custom.svg?v=${s.rev}`;
+				const type = s.png === true ? "image/png" : (s.mime || "image/svg+xml");
 				if (link) {
 					link.setAttribute("href", href);
-					link.setAttribute("type", s.mime || "image/svg+xml");
+					link.setAttribute("type", type);
 				} else {
 					const el = document.createElement("link");
 					el.rel = "icon";
-					el.type = s.mime || "image/svg+xml";
+					el.type = type;
 					el.href = href;
 					document.head.appendChild(el);
 				}
@@ -196,12 +236,27 @@ window.__ModuleLoader__.load({
 				}
 				const reader = new FileReader();
 				reader.onload = async () => {
-					const data = typeof reader.result === "string" ? reader.result : null;
+					let data = typeof reader.result === "string" ? reader.result : null;
 					if (!data) { setError(t("fail")); return; }
+					// Rasterize SVG to PNG in the browser so the host always has
+					// a rasterizable baseline and iOS/apple-touch-icon works.
+					// ICO is left as-is; the host extracts its embedded PNG.
+					let mime = file.type || "image/svg+xml";
+					if (mime === "image/svg+xml" || /\.svg$/i.test(file.name)) {
+						setBusy(true);
+						try {
+							data = await svgToPng(file);
+							mime = "image/png";
+						} catch {
+							setBusy(false);
+							setError(t("svgFail"));
+							return;
+						}
+					}
 					setBusy(true);
 					try {
 						const resp = await rpc.call("/api", "iconCustom/setIcon", {
-							args: { request: { mime: file.type || "image/svg+xml", name: file.name, pwa: pwaEnabled, logo: logoEnabled, data } }
+							args: { request: { mime, name: file.name, pwa: pwaEnabled, logo: logoEnabled, data } }
 						});
 						if (resp && resp.ok === true) {
 							setStatus(resp.value);
