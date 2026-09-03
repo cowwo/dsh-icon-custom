@@ -363,8 +363,11 @@ window.__ModuleLoader__.load({
 			// Brand-mark seat: replaces only the whale mark (verified: a
 			// third-party registration wins over the official occupant and the
 			// official package's mark steps aside). The brand NAME text is a
-			// separate seat and is left untouched.
-			ctx.slots.inject("sidebar.brand.mark", () => ctx.slots.register({ name: "sidebar.brand.mark" }, (props) => React.createElement(BrandMark, { ...props, rpc })));
+			// separate seat and is left untouched. priority -1 is required:
+			// the official occupant holds priority 0, and same-priority
+			// registrations throw ("register at a different priority to shadow
+			// it (lowest renders)").
+			ctx.slots.inject("sidebar.brand.mark", () => ctx.slots.register({ name: "sidebar.brand.mark", priority: -1 }, (props) => React.createElement(BrandMark, { ...props, rpc })));
 			ctx.slots.inject("settings.section", () => ctx.slots.register({
 				name: "settings.section",
 				id: "favicon",
