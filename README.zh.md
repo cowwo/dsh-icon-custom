@@ -25,6 +25,10 @@ dsh plugin --profile web add dsh-icon-custom
 
 ![同时替换 PWA 安装图标选项](./docs/pwa-option.png)
 
+把网页「安装为应用」时,浏览器弹出的安装对话框也会显示你的图标:
+
+![PWA 安装对话框](./docs/install-dialog.png)
+
 说明:
 
 - 该选项**默认不勾选**:不勾选时行为与之前完全一致,平台 manifest 原样透传。

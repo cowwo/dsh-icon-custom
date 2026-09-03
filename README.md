@@ -25,6 +25,10 @@ Tick **同时替换 PWA 安装图标** (checked state is remembered per icon) to
 
 ![PWA install icon option](./docs/pwa-option.png)
 
+When the site is installed as an app, the browser's install dialog picks the custom icon up:
+
+![PWA install dialog](./docs/install-dialog.png)
+
 Notes:
 
 - The option is **off by default**: without it, behavior is identical to before and the platform manifest is served verbatim.
