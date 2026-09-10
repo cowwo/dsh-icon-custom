@@ -6,7 +6,8 @@
   "main": "lib/index.js",
   "license": "MIT",
   "dependencies": {
-    "jimp": "^1.6.1"
+    "jimp": "^1.6.1",
+    "zod": "^4.4.3"
   },
   "dsh": {
     "bundle": {
@@ -33,8 +34,7 @@
     "@deepseek-ai/dsh-client-connection": "*",
     "@deepseek-ai/dsh-client-locale": "*",
     "@deepseek-ai/dsh-client-runtime": "*",
-    "@deepseek-ai/dsh-typert-protocol": "*",
-    "zod": "^4.4.3"
+    "@deepseek-ai/dsh-typert-protocol": "*"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {
@@ -50,9 +50,6 @@
       "optional": true
     },
     "@deepseek-ai/dsh-typert-protocol": {
-      "optional": true
-    },
-    "zod": {
       "optional": true
     }
   },
