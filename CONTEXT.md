@@ -87,3 +87,19 @@ _Avoid_: 圆形图标、自适应图标
 **派生失败回退 (derivation fallback)**:
 当某个图标无法被栅格化(如仅含 BMP 帧的老式 ICO)或 Jimp 解码出错时,不阻塞上传——记录 `derived: false`、`pngBaseline: null`,回退为「原样透传」,favicon 照常工作,仅多尺寸 PWA/logo 集合不生效。
 _Avoid_: 报错、放弃
+
+**未读红点 (unread badge)**:
+标签页图标与左上角 Logo 上"有会话发生了事情、而你还没处理"的红底数字角标;数字是**会话数**而非事件数。
+_Avoid_: 通知数、消息数、待办数
+
+**已读水位线 (seen watermark)**:
+每个浏览器各自的 localStorage 记录,标记"这个会话我上次看到什么时候";打开会话即抬高水位线,是"已处理"的判据。
+_Avoid_: 已读数据库、服务端已读
+
+**结束原因 (turn-end reason)**:
+官方 `turn/end` 的 `reason.kind`(`completed` / `error` / `blocked` / `max-tokens` / `interrupted` / `aborted`);`aborted` 再按取消来源拆成"我自己停止"与"其他中断"。设置页按这些项逐条勾选。
+_Avoid_: 状态、结果类型
+
+**数据来源 (number source)**:
+红点数字的来源,`真实未读`(默认,官方事实折叠而来)或 `手动测试`(设置页手填,仅用于试看效果)。
+_Avoid_: 模式、开关
