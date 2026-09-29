@@ -301,6 +301,32 @@ window.__ModuleLoader__.load({
 			return changed;
 		}
 		/**
+		 * The session the main view is showing.
+		 *
+		 * DSH 0.2.x carries NO `current` field in the session-list snapshot — it is
+		 * written with exactly `ids` / `byId` / `phase` / `projectionsBySession`. The
+		 * official signal is the row's `retainedBy.mainView` retention count, the same
+		 * one ui-layout's DocumentTitle, ui-cordis, ui-open-in-app and ui-session read.
+		 * Reading `list.current` here made `noteSeen()` a no-op, so the seen watermark
+		 * never advanced and an unread dot could never be cleared by opening the
+		 * session. Runtimes that do expose `current` are still honoured first.
+		 * @param list - the session list snapshot (may be absent).
+		 * @returns the id being viewed, or undefined.
+		 */
+		function currentSessionId(list) {
+			if (list === null || typeof list !== "object") return undefined;
+			if (typeof list.current === "string" && list.current !== "") return list.current;
+			const byId = list.byId;
+			if (byId === null || typeof byId !== "object") return undefined;
+			for (const session of Object.values(byId)) {
+				if (session === null || typeof session !== "object") continue;
+				const retainedBy = session.retainedBy;
+				const count = retainedBy !== null && typeof retainedBy === "object" ? retainedBy.mainView : undefined;
+				if (typeof count === "number" && count > 0) return session.id;
+			}
+			return undefined;
+		}
+		/**
 		 * How many sessions deserve the badge right now: endings whose reason is
 		 * enabled and that this browser has not seen since, plus sessions waiting
 		 * for you (when that source is enabled). Sub-agent sessions and the session
@@ -318,7 +344,7 @@ window.__ModuleLoader__.load({
 			/** { id, title, waiting, kind, at } — newest first, "in wait" ahead of "ended". */
 			const hits = [];
 			const ids = new Set();
-			const current = list !== null && typeof list === "object" ? list.current : undefined;
+			const current = currentSessionId(list);
 			const byId = list !== null && typeof list === "object" && list.byId !== null && typeof list.byId === "object" ? list.byId : {};
 			const titleOf = (id, entry) => (entry !== null && typeof entry === "object" && typeof entry.displayTitle === "string" && entry.displayTitle !== "" ? entry.displayTitle : id);
 			// Which workspace the session lives in. The sidebar's own workspace rows are
@@ -875,11 +901,28 @@ window.__ModuleLoader__.load({
 		 * count simply drops back to 0.
 		 */
 		function BadgeSource(props) {
-			// Both hooks are official root-scope standard props: the session list
-			// (which carries every session's `lastTurnEnd` projection value) and the
-			// pending-interaction registry the sidebar row marker already uses.
+			// The hooks below are official root-scope standard props: the session list
+			// (which carries every session's `lastTurnEnd` projection value), the
+			// session-status map the sidebar row marker already uses, and the workspace
+			// snapshot that names each row.
 			const list = typeof props.useSessions === "function" ? props.useSessions((state) => state) : undefined;
-			const pending = typeof props.useSessionPendingInteraction === "function" ? props.useSessionPendingInteraction((map) => map) : undefined;
+			// 0.2.x has no `useSessionPendingInteraction` — the string occurs nowhere in
+			// the runtime, so this half used to contribute nothing at all. The official
+			// replacement is the session-status map, whose rows carry `pendingInteraction`
+			// (alongside `completionUnread`, which the shipped sidebar reads too). Reshape
+			// it into the `id → { kind }` map `collectUnread` expects.
+			const status = typeof props.useSessionStatus === "function" ? props.useSessionStatus((map) => map) : undefined;
+			const pending = React.useMemo(() => {
+				const out = new Map();
+				if (status === null || status === undefined || typeof status.forEach !== "function") return out;
+				status.forEach((value, id) => {
+					const interaction = value !== null && typeof value === "object" ? value.pendingInteraction : undefined;
+					if (interaction === null || interaction === undefined) return;
+					const kind = typeof interaction === "object" && typeof interaction.kind === "string" ? interaction.kind : "";
+					out.set(id, { kind });
+				});
+				return out;
+			}, [status]);
 			const workspaces = typeof props.useWorkspaces === "function" ? props.useWorkspaces((state) => state) : undefined;
 			const [config, setConfig] = React.useState(unreadConfig);
 			React.useEffect(() => subscribeUnreadConfig(setConfig), []);
@@ -891,7 +934,7 @@ window.__ModuleLoader__.load({
 				saveSeenState();
 			}, [list]);
 			// Looking at a session marks it seen; the count also excludes it outright.
-			const currentId = list !== null && typeof list === "object" ? list.current : undefined;
+			const currentId = currentSessionId(list);
 			React.useEffect(() => {
 				if (noteSeen(currentId)) saveSeenState();
 			}, [currentId]);
@@ -1447,7 +1490,10 @@ window.__ModuleLoader__.load({
 		}
 		//#endregion
 
-		const inject = ["slots", "locale", "connection", "sessions"];
+		// `sessions` is gone from this list: its only use was the removed
+		// `ctx.sessions.open(id)`. Navigation now goes through an optional
+		// `ctx.get("uiWorkspace")` lookup instead of a hard dependency.
+		const inject = ["slots", "locale", "connection"];
 		function apply(ctx) {
 			ctx.effect(() => ctx.locale.register(NS, { zh, en }), "dsh-icon-custom: dictionaries");
 			const t = ctx.locale.bind(NS);
@@ -1495,8 +1541,15 @@ window.__ModuleLoader__.load({
 			// Additive seats for "where exactly?" — a foot entry beside the shipped
 			// Settings/Cordis buttons, and the frame-wide overlay for its list. A fresh
 			// id is added beside the others; nothing shipped is shadowed.
+			//
+			// 0.2.x has no `ctx.sessions.open(id)` (the ClientSessions service exposes
+			// retain/using/retainInfo/refreshProjections/search/fork/scope/binding — no
+			// navigation). Official code jumps to a session with
+			// `ctx.uiWorkspace.openSession(id)` (ui-chat does exactly this), so the entry
+			// is looked up optionally: navigation is best effort and must never make the
+			// favicon half depend on the workspace UI being mounted.
 			const openSession = (id) => {
-				try { ctx.sessions.open(id); } catch { /* navigation is best effort */ }
+				try { ctx.get("uiWorkspace")?.openSession(id); } catch { /* navigation is best effort */ }
 			};
 			ctx.slots.inject("sidebar.footer.action", () => ctx.slots.register(
 				{ name: "sidebar.footer.action", id: "icon-custom-unread", order: 20, label: () => t("unreadPanelShort") },
