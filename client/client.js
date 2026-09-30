@@ -62,7 +62,10 @@ window.__ModuleLoader__.load({
 			unreadPanelOther: "其他",
 			workspaceDotLabel: "在工作区和会话行上显示红点(实验)",
 			workspaceDotHint: "在侧栏工作区那一行的文件夹图标上点一个小红点。这一项是贴着页面结构做的,DSH 升级后可能失效;失效时只会变成\"不显示\",不会影响红点数字、清单、跳转这些功能,随时可以关掉它。",
-			badgeTestHint: "真实未读 = 有会话发生了上面勾选的情况、而且你还没看过它(打开该会话即视为已读)。你正开着的会话也算——窗口可能被最小化、页面可能切到后台,这里无从判断你在不在看,所以不做这个区分。只有子代理不计。手动模式:自己填数字试看效果。刷新页面后回到真实未读。"
+			badgeTestHint: "真实未读 = 有会话发生了上面勾选的情况、而且你还没看过它(打开该会话即视为已读)。你正开着的会话也算——窗口可能被最小化、页面可能切到后台,这里无从判断你在不在看,所以不做这个区分。只有子代理不计。手动模式:自己填数字试看效果。刷新页面后回到真实未读。",
+			clearDelayLabel: "进入会话后多久算已读:",
+			clearDelayUnit: "秒",
+			clearDelayHint: "填 0 = 进去就算已读(红点立即消失)。大于 0 时,你要在那个会话里连续待满这么多秒它才算看过:中途切走、或它又跑完一轮,都会清零重数;刷新页面也重新数。上限 600 秒。"
 		};
 		const en = {
 			nav: "Favicon",
@@ -117,7 +120,10 @@ window.__ModuleLoader__.load({
 			unreadPanelOther: "Other",
 			workspaceDotLabel: "Dots on workspace and session rows (experimental)",
 			workspaceDotHint: "Adds a small red dot to the folder icon of each workspace row. This one reads the page structure, so a DSH upgrade may break it; when it does it simply stops showing, never affecting the counts, the list, or navigation. Turn it off any time.",
-			badgeTestHint: "Real unread = a session ended for one of the checked reasons and you have not looked at it yet (opening a session marks it read). The session you are viewing counts too — the window may be minimised or the page in the background, so this half cannot tell whether you are looking, and does not pretend to. Only sub-agents never count. Manual = type a number to preview. Resets to Real on reload."
+			badgeTestHint: "Real unread = a session ended for one of the checked reasons and you have not looked at it yet (opening a session marks it read). The session you are viewing counts too — the window may be minimised or the page in the background, so this half cannot tell whether you are looking, and does not pretend to. Only sub-agents never count. Manual = type a number to preview. Resets to Real on reload.",
+			clearDelayLabel: "Mark read after staying:",
+			clearDelayUnit: "seconds",
+			clearDelayHint: "0 = read as soon as you enter (the dot clears at once). Above 0 you must stay in that session for this many seconds before it counts as read: leaving it, or a fresh ending in it, resets the clock, and so does a reload. Capped at 600 seconds."
 		};
 		//#endregion
 
@@ -231,8 +237,18 @@ window.__ModuleLoader__.load({
 		};
 		/** Mirror of the host defaults; only used before the first status arrives. */
 		const UNREAD_FALLBACK_REASONS = { completed: true, error: true, blocked: true, "max-tokens": true, interrupted: true, "aborted:user": false, "aborted:other": true };
-		let unreadConfig = { reasons: { ...UNREAD_FALLBACK_REASONS }, pending: true, workspaceDot: true };
+		/** Mirror of the host's cap (see lib/unread.js) — 10 minutes. */
+		const UNREAD_CLEAR_DELAY_MAX_SEC = 600;
+		let unreadConfig = { reasons: { ...UNREAD_FALLBACK_REASONS }, pending: true, workspaceDot: true, clearDelaySec: 0 };
 		const unreadConfigListeners = new Set();
+		/** Mirror of the host's normalizer: any input becomes an integer 0..cap seconds. */
+		function normalizeClearDelay(input) {
+			const value = typeof input === "string" && input.trim() !== "" ? Number(input) : input;
+			if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+			const seconds = Math.floor(value);
+			if (seconds <= 0) return 0;
+			return Math.min(seconds, UNREAD_CLEAR_DELAY_MAX_SEC);
+		}
 		function normalizeUnreadConfig(input) {
 			const source = input !== null && typeof input === "object" ? input : {};
 			const raw = source.reasons !== null && typeof source.reasons === "object" ? source.reasons : {};
@@ -243,7 +259,8 @@ window.__ModuleLoader__.load({
 			return {
 				reasons,
 				pending: typeof source.pending === "boolean" ? source.pending : true,
-				workspaceDot: typeof source.workspaceDot === "boolean" ? source.workspaceDot : true
+				workspaceDot: typeof source.workspaceDot === "boolean" ? source.workspaceDot : true,
+				clearDelaySec: normalizeClearDelay(source.clearDelaySec)
 			};
 		}
 		function emitUnreadConfig(input) {
@@ -325,6 +342,29 @@ window.__ModuleLoader__.load({
 				if (typeof count === "number" && count > 0) return session.id;
 			}
 			return undefined;
+		}
+		/**
+		 * What the "stay here long enough" timer is armed for, or "" when nothing
+		 * should be armed.
+		 *
+		 * Keyed on the session's own `lastTurnEnd.endAt`, deliberately NOT on the
+		 * collected item's `at`: a "waiting for you" item carries `at: Date.now()`,
+		 * which changes on every evaluation — keying on that would tear the timer
+		 * down and re-arm it forever, and a waiting session could never be marked
+		 * read. Including `endAt` is also what makes a NEW ending restart the clock
+		 * instead of inheriting the previous one's progress.
+		 * @param sessionId - the session being viewed.
+		 * @param list - the session list snapshot.
+		 * @returns the key, or "" when there is no session to arm for.
+		 */
+		function stayKeyFor(sessionId, list) {
+			if (typeof sessionId !== "string" || sessionId === "") return "";
+			const byId = list !== null && typeof list === "object" && list.byId !== null && typeof list.byId === "object" ? list.byId : {};
+			const entry = byId[sessionId];
+			const values = entry !== null && typeof entry === "object" ? entry.projectionValues : undefined;
+			const value = values !== null && typeof values === "object" ? values[LAST_TURN_END_KEY] : undefined;
+			const endAt = value !== null && typeof value === "object" && typeof value.endAt === "number" ? value.endAt : 0;
+			return `${sessionId}\u0000${endAt}`;
 		}
 		/**
 		 * How many sessions deserve the badge right now: endings whose reason is
@@ -991,13 +1031,26 @@ window.__ModuleLoader__.load({
 				pruneSeenState();
 				saveSeenState();
 			}, [list]);
-			// Looking at a session marks it seen; the count also excludes it outright.
 			const currentId = currentSessionId(list);
-			React.useEffect(() => {
-				if (noteSeen(currentId)) saveSeenState();
-			}, [currentId]);
 			const items = collectUnread(list, pending, config, seenState.seen);
 			const count = items.length;
+			// Being in a session is what marks it read — but only once you have STAYED
+			// `clearDelaySec` seconds (0 = the moment you enter, the original
+			// behaviour). The timer is torn down whenever you leave, or whenever that
+			// session becomes unread again from a fresh ending, so the clock restarts;
+			// that teardown IS the "continuous stay, leaving resets it" rule. A reload
+			// restarts it too, since the timer only lives in this page.
+			const currentUnread = items.some((item) => item.id === currentId);
+			const stayKey = currentUnread ? stayKeyFor(currentId, list) : "";
+			const delayMs = config.clearDelaySec * 1000;
+			const [, bumpStay] = React.useState(0);
+			React.useEffect(() => {
+				if (stayKey === "") return undefined;
+				const markRead = () => { if (noteSeen(currentId)) { saveSeenState(); bumpStay((n) => n + 1); } };
+				if (delayMs <= 0) { markRead(); return undefined; }
+				const timer = window.setTimeout(markRead, delayMs);
+				return () => window.clearTimeout(timer);
+			}, [stayKey, currentId, delayMs]);
 			React.useEffect(() => { emitRealBadge(count, items); }, [count, items]);
 			// The workspace rows are labelled with the workspace TITLE, which is not
 			// always the cwd basename, so map session → title from the official snapshot.
@@ -1373,6 +1426,11 @@ window.__ModuleLoader__.load({
 			const [badgeSourceValue, setBadgeSourceValue] = React.useState(badgeSource);
 			const [unread, setUnread] = React.useState(unreadConfig);
 			React.useEffect(() => subscribeUnreadConfig(setUnread), []);
+			// Draft text for the delay box: typing must not save on every keystroke,
+			// and the box has to show the CLAMPED value once the save lands (type
+			// 99999 and it settles on the 600 cap instead of lying about it).
+			const [clearDelayDraft, setClearDelayDraft] = React.useState(String(unreadConfig.clearDelaySec));
+			React.useEffect(() => { setClearDelayDraft(String(unread.clearDelaySec)); }, [unread.clearDelaySec]);
 			const inputRef = React.useRef(null);
 
 			const load = React.useCallback(async () => {
@@ -1430,28 +1488,35 @@ window.__ModuleLoader__.load({
 				setBadgeSourceValue(value);
 				emitBadgeSource(value);
 			}, []);
+			// One save path for the whole unread rule: the patch is merged onto the
+			// current config, so every field is carried over by construction. Letting
+			// each control build its own request is how a new field gets silently
+			// dropped by whichever caller forgot it.
+			const saveUnreadRule = React.useCallback((patch) => {
+				const next = normalizeUnreadConfig({ ...unreadConfig, ...patch });
+				emitUnreadConfig(next);
+				rpc.call("/api", "iconCustom/setUnreadRule", {
+					args: { request: { reasons: next.reasons, pending: next.pending, workspaceDot: next.workspaceDot, clearDelaySec: next.clearDelaySec } }
+				}).catch(() => {});
+			}, [rpc]);
 			// Toggle one unread reason. Applies locally at once; the host keeps the
 			// durable copy so the rule survives a restart and other browsers.
 			const onUnreadToggle = React.useCallback((key, checked) => {
-				const current = unreadConfig;
-				const reasons = Object.assign({}, current.reasons);
-				let pending = current.pending;
-				if (key === "pending") pending = checked;
-				else reasons[key] = checked;
-				const next = normalizeUnreadConfig({ reasons, pending, workspaceDot: current.workspaceDot });
-				emitUnreadConfig(next);
-				rpc.call("/api", "iconCustom/setUnreadRule", {
-					args: { request: { reasons: next.reasons, pending: next.pending, workspaceDot: next.workspaceDot } }
-				}).catch(() => {});
-			}, [rpc]);
+				if (key === "pending") { saveUnreadRule({ pending: checked }); return; }
+				const reasons = Object.assign({}, unreadConfig.reasons);
+				reasons[key] = checked;
+				saveUnreadRule({ reasons });
+			}, [saveUnreadRule]);
 			// The fuse for the one fragile piece (see the workspace-dots region).
 			const onWorkspaceDotToggle = React.useCallback((checked) => {
-				const next = normalizeUnreadConfig({ reasons: unreadConfig.reasons, pending: unreadConfig.pending, workspaceDot: checked });
-				emitUnreadConfig(next);
-				rpc.call("/api", "iconCustom/setUnreadRule", {
-					args: { request: { reasons: next.reasons, pending: next.pending, workspaceDot: next.workspaceDot } }
-				}).catch(() => {});
-			}, [rpc]);
+				saveUnreadRule({ workspaceDot: checked });
+			}, [saveUnreadRule]);
+			// Seconds you must stay in a session before it counts as read; 0 = as soon
+			// as you enter. Clamped by the shared normalizer, so a stray keystroke can
+			// never persist an absurd delay.
+			const onClearDelayChange = React.useCallback((value) => {
+				saveUnreadRule({ clearDelaySec: normalizeClearDelay(value) });
+			}, [saveUnreadRule]);
 			/** One unread checkbox; `key === "pending"` is the "someone is waiting" row. */
 			const renderReasonCheckbox = (key, labelKey) => React.createElement("label", {
 				key,
@@ -1686,6 +1751,22 @@ window.__ModuleLoader__.load({
 							["completed", "error", "blocked", "max-tokens", "interrupted", "aborted:user", "aborted:other"].map((key) => renderReasonCheckbox(key, REASON_LABEL_KEYS[key])),
 							renderReasonCheckbox("pending", "reasonPending")
 						)
+					),
+					React.createElement("div", { style: { marginTop: "12px" } },
+						React.createElement("div", { style: style.desc }, t("clearDelayLabel")),
+						React.createElement("label", { style: { display: "inline-flex", alignItems: "center", gap: "6px", marginTop: "6px", fontSize: 12, color: "var(--dsw-alias-label-primary)" } },
+							React.createElement("input", {
+								type: "number", min: 0, max: UNREAD_CLEAR_DELAY_MAX_SEC, step: 1, inputMode: "numeric",
+								"aria-label": t("clearDelayLabel"),
+								value: clearDelayDraft,
+								onChange: (event) => setClearDelayDraft(event.target.value),
+								onBlur: () => onClearDelayChange(clearDelayDraft),
+								onKeyDown: (event) => { if (event.key === "Enter") onClearDelayChange(clearDelayDraft); },
+								style: { width: "76px", padding: "3px 6px", border: "1px solid var(--dsw-alias-border-l2)", borderRadius: "6px", background: "transparent", color: "inherit", font: "inherit", fontSize: 12 }
+							}),
+							React.createElement("span", null, t("clearDelayUnit"))
+						),
+						React.createElement("div", { style: style.hint }, t("clearDelayHint"))
 					),
 					React.createElement("div", { style: { marginTop: "10px" } },
 						React.createElement("label", { style: { display: "inline-flex", alignItems: "center", gap: "6px", fontSize: 12, color: "var(--dsw-alias-label-primary)", cursor: "pointer" } },
