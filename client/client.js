@@ -426,6 +426,9 @@ window.__ModuleLoader__.load({
 		function notifyBadge() {
 			const snapshot = badgeSnapshot();
 			badgeListeners.forEach((fn) => { try { fn(snapshot); } catch {} });
+			// The header badge is a DOM node, not a listener, so it is reconciled
+			// here as well as from the mutation watchdog. Idempotent either way.
+			paintHeaderBadge();
 		}
 		/** Manual test input. */
 		function emitBadge(value) {
@@ -1012,46 +1015,180 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * The sidebar-foot entry: a bell carrying the unread count, beside the
-		 * shipped Settings and Cordis buttons. Both that seat and the overlay list
-		 * are additive (`replaceRisk: none`) — a fresh id is added beside the others,
-		 * nothing shipped is shadowed.
+		 * The unread badge, injected into the sidebar's section header.
+		 *
+		 * There is no slot to register into: `sidebar.workspaces` is a SINGLE slot
+		 * owned by ui-workspace that covers the whole browsing region *including* its
+		 * header, and shadowing it would mean reimplementing the shipped browser. So
+		 * the badge is injected into the DOM — the same technique, the same contract,
+		 * and the same failure posture as the workspace-row dots: decorative, never
+		 * throws, and after repeated failures it gives up on its own with one warning.
+		 *
+		 * The count is shown for EVERY value including zero: a grey 0 keeps the
+		 * position from jumping, and doubles as the only way back to the panel once
+		 * the old sidebar-foot button is gone.
 		 */
-		function UnreadFooterButton(props) {
-			const [snapshot, setSnapshot] = React.useState(badgeSnapshot);
-			const [open, setOpen] = React.useState(unreadPanelOpen);
-			const ref = React.useRef(null);
-			React.useEffect(() => subscribeBadge(setSnapshot), []);
-			React.useEffect(() => subscribeUnreadPanel(() => setOpen(unreadPanelOpen)), []);
-			const t = props.t;
-			const count = snapshot.count;
-			const wide = props.wide !== false;
-			const label = count > 0 ? t("unreadPanelCount").replace("{n}", String(count)) : t("unreadPanelNone");
-			const onClick = () => {
-				const node = ref.current;
-				const rect = node !== null && typeof node.getBoundingClientRect === "function" ? node.getBoundingClientRect() : null;
-				toggleUnreadPanel(rect === null ? null : { left: rect.left, top: rect.top });
-			};
-			return React.createElement("button", {
-				ref, type: "button", onClick, title: label, "aria-label": label, "aria-expanded": open,
-				style: {
-					position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px",
-					height: "32px", width: wide ? "auto" : "32px", padding: wide ? "0 10px" : "0",
-					border: "1px solid var(--dsw-alias-border-l2)", borderRadius: "8px", background: "transparent",
-					color: "var(--dsw-alias-label-primary)", cursor: "pointer", font: "inherit", fontSize: "12px",
-					opacity: count > 0 ? 1 : 0.55
+		const HEAD_BADGE_ATTR = "data-icon-custom-unreadbadge";
+		const HEAD_BADGE_STYLE_ID = "dsh-icon-custom-unreadbadge-css";
+		const HEAD_BADGE_WIRED = "data-icon-custom-unreadbadge-wired";
+		const HEAD_BADGE_MAX_FAILURES = 40;
+		/** How many ancestors to walk up looking for the header row. */
+		const HEAD_BADGE_MAX_STEPS = 6;
+		let headerBadgeHost = null;
+		let headerBadgeHostPosition = "";
+		let headerBadgeFailures = 0;
+		let headerBadgeGivenUp = false;
+		/** Locale binder, installed by `apply()` so the injected node can label itself. */
+		let badgeT = null;
+
+		/**
+		 * Rules for the injected badge. A stylesheet rather than inline styles because
+		 * hover and the theme-following ring cannot be expressed inline. Colours come
+		 * from the official tokens wherever one exists:
+		 *   * the red is the one this plugin has always drawn;
+		 *   * the "nothing pending" grey is the official idle-state colour, so it
+		 *     follows light/dark without naming either;
+		 *   * the ring is the sidebar's own fill — that is what makes a badge sitting
+		 *     on top of a glyph read as a badge instead of a smudge.
+		 */
+		const HEAD_BADGE_CSS = [
+			`[${HEAD_BADGE_ATTR}]{position:absolute;top:-11px;right:-13px;width:23px;height:23px;padding:0;border:0;background:transparent;display:flex;align-items:center;justify-content:center;border-radius:7px;cursor:pointer;z-index:2;font:inherit}`,
+			`[${HEAD_BADGE_ATTR}]:hover{background:rgba(127,127,127,.16)}`,
+			`[${HEAD_BADGE_ATTR}]>span{display:flex;align-items:center;justify-content:center;min-width:15px;height:15px;padding:0 3.5px;box-sizing:border-box;border-radius:999px;background:#e5484d;color:#fff;font-size:9.5px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em;box-shadow:0 0 0 1.5px var(--dsw-specific-sidebar-fill,#fff);pointer-events:none}`,
+			`[${HEAD_BADGE_ATTR}][data-zero="1"]>span{background:var(--dsw-alias-state-idle-primary,#b6bcc4)}`
+		].join("");
+
+		/** Install the badge rules once per page. */
+		function ensureHeaderBadgeStyle() {
+			try {
+				if (document.getElementById(HEAD_BADGE_STYLE_ID) !== null) return;
+				const style = document.createElement("style");
+				style.id = HEAD_BADGE_STYLE_ID;
+				style.textContent = HEAD_BADGE_CSS;
+				document.head.appendChild(style);
+			} catch { /* styling is cosmetic; never let it reach a render tree */ }
+		}
+
+		/**
+		 * The section-header label inside the browsing region.
+		 *
+		 * The title TEXT is deliberately not matched: it flips between 工作区 and 会话
+		 * with the group-by mode and is localized, so any string table would be both
+		 * incomplete and wrong half the time. Structure is stable instead —
+		 * `sidebar.workspaces` is a slot root (the official renderer stamps
+		 * `data-slot` on those), the header row's first button is the search control,
+		 * and the label is the row's first text-bearing child that owns no button.
+		 * @param container - the browsing region root.
+		 * @returns the label element, or null when this build's DOM is not recognised.
+		 */
+		function sectionHeaderLabel(container) {
+			// The first button that is NOT ours. Loading order matters: our badge sits
+			// inside the label, which precedes the search control in document order, so
+			// a plain `querySelector("button")` would return the badge itself from the
+			// second paint onward — and then the row anchor below would resolve to the
+			// label instead of the header row, making the locator lose its own host.
+			let firstButton = null;
+			for (const candidate of container.querySelectorAll("button")) {
+				if (candidate.getAttribute(HEAD_BADGE_ATTR) !== null) continue;
+				firstButton = candidate;
+				break;
+			}
+			if (firstButton === null) return null;
+			let row = firstButton.parentElement;
+			for (let step = 0; step < HEAD_BADGE_MAX_STEPS && row !== null && row !== container; step++) {
+				for (const child of row.children) {
+					if (child === firstButton || child.contains(firstButton)) continue;
+					// Already carrying our badge? Then this IS the label — checked BEFORE
+					// the "owns no button" rule below, because our own injected button
+					// would otherwise disqualify the very element we injected it into and
+					// every repaint after the first would silently give up.
+					if (child.querySelector(`[${HEAD_BADGE_ATTR}]`) !== null) return child;
+					if (child.tagName === "BUTTON") continue;
+					if (child.querySelector("button") !== null) continue;
+					if ((child.textContent ?? "").trim() !== "") return child;
 				}
-			},
-				React.createElement("svg", { width: 16, height: 16, viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", style: { flex: "none" } },
-					React.createElement("path", { d: "M8 2.2a3.6 3.6 0 0 0-3.6 3.6v2.4L3.2 11h9.6l-1.2-2.8V5.8A3.6 3.6 0 0 0 8 2.2Z", stroke: "currentColor", strokeWidth: 1.3, strokeLinejoin: "round" }),
-					React.createElement("path", { d: "M6.4 12.8a1.6 1.6 0 0 0 3.2 0", stroke: "currentColor", strokeWidth: 1.3, strokeLinecap: "round" })
-				),
-				wide ? React.createElement("span", null, t("unreadPanelShort")) : null,
-				count > 0 ? React.createElement("span", {
-					"aria-hidden": "true",
-					style: { position: "absolute", top: "-6px", right: "-6px", minWidth: "16px", height: "16px", padding: "0 4px", boxSizing: "border-box", borderRadius: "999px", background: "#e5484d", color: "#fff", fontSize: "10px", fontWeight: 700, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", fontVariantNumeric: "tabular-nums", pointerEvents: "none" }
-				}, badgeLabel(count)) : null
-			);
+				row = row.parentElement;
+			}
+			return null;
+		}
+
+		/** Warn once, then give up for this page — the row dots' exact posture. */
+		function noteHeaderBadgeFailure(why) {
+			headerBadgeFailures++;
+			if (headerBadgeFailures === 1) {
+				try { console.warn("dsh-icon-custom: 工作区标题红点定位失败,已降级(不影响其他功能):", why); } catch {}
+				return;
+			}
+			if (headerBadgeFailures < HEAD_BADGE_MAX_FAILURES || headerBadgeGivenUp) return;
+			headerBadgeGivenUp = true;
+			try { console.warn("dsh-icon-custom: 工作区标题红点连续失败,本次会话内已自动关闭。"); } catch {}
+		}
+
+		/**
+		 * Reconcile the header badge with the current count.
+		 *
+		 * Driven by the same mutation watchdog as the row dots, so it must be
+		 * idempotent: it writes only what actually differs, or the observer that
+		 * called it would re-arm on its own output.
+		 */
+		function paintHeaderBadge() {
+			if (headerBadgeGivenUp) return;
+			const container = workspaceDotContainer();
+			if (container === null) return; // start-up race, not a failure
+			const label = sectionHeaderLabel(container);
+			if (label === null) { noteHeaderBadgeFailure("找不到分区标题"); return; }
+			ensureHeaderBadgeStyle();
+			if (headerBadgeHost !== label) {
+				if (headerBadgeHost !== null) { try { headerBadgeHost.style.position = headerBadgeHostPosition; } catch {} }
+				headerBadgeHost = label;
+				headerBadgeHostPosition = label.style.position;
+				try { if (window.getComputedStyle(label).position === "static") label.style.position = "relative"; } catch {}
+			}
+			let node = label.querySelector(`[${HEAD_BADGE_ATTR}]`);
+			if (node === null) {
+				node = document.createElement("button");
+				node.type = "button";
+				node.setAttribute(HEAD_BADGE_ATTR, "1");
+				label.appendChild(node);
+			}
+			if (node.getAttribute(HEAD_BADGE_WIRED) !== "1") {
+				node.setAttribute(HEAD_BADGE_WIRED, "1");
+				node.addEventListener("click", (event) => {
+					// The label is the sidebar's own; keep the click to ourselves.
+					event.preventDefault();
+					event.stopPropagation();
+					const rect = node.getBoundingClientRect();
+					toggleUnreadPanel({ left: rect.left, top: rect.top });
+				});
+			}
+			const count = effectiveCount();
+			const text = badgeLabel(count);
+			const zero = count > 0 ? "0" : "1";
+			if (node.getAttribute("data-zero") !== zero) node.setAttribute("data-zero", zero);
+			if (typeof badgeT === "function") {
+				const spoken = count > 0 ? badgeT("unreadPanelCount").replace("{n}", String(count)) : badgeT("unreadPanelNone");
+				if (node.getAttribute("aria-label") !== spoken) {
+					node.setAttribute("aria-label", spoken);
+					node.setAttribute("title", spoken);
+				}
+			}
+			let pill = node.firstElementChild;
+			if (pill === null || pill.tagName !== "SPAN") {
+				pill = document.createElement("span");
+				pill.setAttribute("aria-hidden", "true");
+				node.appendChild(pill);
+			}
+			if (pill.textContent !== text) pill.textContent = text;
+		}
+
+		/** Take the badge back out and restore the label's own positioning. */
+		function clearHeaderBadge() {
+			try { document.querySelectorAll(`[${HEAD_BADGE_ATTR}]`).forEach((node) => node.remove()); } catch {}
+			if (headerBadgeHost !== null) {
+				try { headerBadgeHost.style.position = headerBadgeHostPosition; } catch {}
+			}
+			headerBadgeHost = null;
+			headerBadgeHostPosition = "";
 		}
 
 		/**
@@ -1577,9 +1714,11 @@ window.__ModuleLoader__.load({
 				inject: () => ({ t })
 			}, (props) => React.createElement(FaviconSection, { ...props, t, rpc })));
 
-			// Additive seats for "where exactly?" — a foot entry beside the shipped
-			// Settings/Cordis buttons, and the frame-wide overlay for its list. A fresh
-			// id is added beside the others; nothing shipped is shadowed.
+			// The badge itself is NOT a slot occupant: it is injected into the
+			// sidebar's section header by `paintHeaderBadge()` (see above), because
+			// `sidebar.workspaces` is a single slot covering the whole region. Only
+			// the list it opens still rides a slot — the frame-wide overlay, which
+			// escapes the sidebar's clipping.
 			//
 			// 0.2.x has no `ctx.sessions.open(id)` (the ClientSessions service exposes
 			// retain/using/retainInfo/refreshProjections/search/fork/scope/binding — no
@@ -1590,10 +1729,9 @@ window.__ModuleLoader__.load({
 			const openSession = (id) => {
 				try { ctx.get("uiWorkspace")?.openSession(id); } catch { /* navigation is best effort */ }
 			};
-			ctx.slots.inject("sidebar.footer.action", () => ctx.slots.register(
-				{ name: "sidebar.footer.action", id: "icon-custom-unread", order: 20, label: () => t("unreadPanelShort") },
-				(props) => React.createElement(UnreadFooterButton, { ...props, t, onOpen: openSession })
-			));
+			// The injected node labels itself for screen readers, so it needs the
+			// locale binder that only exists inside `apply()`.
+			badgeT = t;
 			ctx.slots.inject("shell.overlay", () => ctx.slots.register(
 				{ name: "shell.overlay", id: "icon-custom-unread-popup", order: 30 },
 				() => React.createElement(UnreadPopup, { t, onOpen: openSession })
@@ -1656,7 +1794,13 @@ window.__ModuleLoader__.load({
 				const schedule = () => {
 					if (queued) return;
 					queued = true;
-					window.setTimeout(() => { queued = false; paintWorkspaceDots(); }, 200);
+					window.setTimeout(() => {
+						queued = false;
+						paintWorkspaceDots();
+						// Same region, same watchdog: the section-header badge is
+						// re-injected whenever the shipped UI re-renders over it.
+						paintHeaderBadge();
+					}, 200);
 				};
 				const attach = () => {
 					const container = workspaceDotContainer();
@@ -1683,6 +1827,7 @@ window.__ModuleLoader__.load({
 					offDots();
 					offConfig();
 					clearWorkspaceDots();
+					clearHeaderBadge();
 				};
 			}, "dsh-icon-custom: workspace dots");
 			// The platform favicon.svg repaints itself for dark mode through
