@@ -509,23 +509,35 @@ window.__ModuleLoader__.load({
 			if (ICON_ORIGINALS.has(link)) return;
 			ICON_ORIGINALS.set(link, { href: link.getAttribute("href"), type: link.getAttribute("type") });
 		}
-		/** Point every icon link at one image, so no scheme-specific sibling is left stale. */
+		/**
+		 * Point every icon link at one image, so no scheme-specific sibling is left stale.
+		 * Writes only on change: the head MutationObserver feeds `reconcileFavicon`,
+		 * so a redundant write would re-arm the watchdog on every tick.
+		 */
 		function setIconEverywhere(href, type) {
 			for (const link of iconLinks()) {
 				rememberIcon(link);
-				link.setAttribute("href", href);
-				if (typeof type === "string" && type !== "") link.setAttribute("type", type);
-				else link.removeAttribute("type");
+				if (link.getAttribute("href") !== href) link.setAttribute("href", href);
+				if (typeof type === "string" && type !== "") {
+					if (link.getAttribute("type") !== type) link.setAttribute("type", type);
+				} else if (link.getAttribute("type") !== null) link.removeAttribute("type");
 			}
 		}
-		/** Put the authored hrefs back; a link this plugin created falls back to the platform default. */
+		/**
+		 * Put the authored hrefs back; a link this plugin created falls back to the
+		 * platform default. Idempotent for the same watchdog reason as above, and a
+		 * no-op for any link the plugin never touched — which is what keeps the
+		 * documented "zero side effects while no custom icon is set" true.
+		 */
 		function restoreShippedIcons() {
 			for (const link of iconLinks()) {
 				const original = ICON_ORIGINALS.get(link);
 				if (original === undefined) continue; // never touched → leave the shipped tag alone
-				link.setAttribute("href", original.href === null ? "/favicon.svg" : original.href);
-				if (original.type === null) link.removeAttribute("type");
-				else link.setAttribute("type", original.type);
+				const href = original.href === null ? "/favicon.svg" : original.href;
+				if (link.getAttribute("href") !== href) link.setAttribute("href", href);
+				if (original.type === null) {
+					if (link.getAttribute("type") !== null) link.removeAttribute("type");
+				} else if (link.getAttribute("type") !== original.type) link.setAttribute("type", original.type);
 			}
 		}
 		function iconLink() {
@@ -575,11 +587,12 @@ window.__ModuleLoader__.load({
 		async function applyBadgeToFavicon(count, size) {
 			const base = desiredIconHref();
 			if (count <= 0) {
-				// Nothing to show: make sure the page carries the plugin's own icon
-				// (this also repairs a stale/proxied link that still points elsewhere).
-				// EVERY icon link is checked — a single stale scheme-specific sibling
-				// would outrank the one we fix.
-				if (iconLinks().some((candidate) => candidate.getAttribute("href") !== base)) setIconEverywhere(base, desiredIconType());
+				// No badge to draw. With a custom icon active the page must carry it on
+				// EVERY link (a stale scheme-specific sibling outranks the one we set);
+				// with none, the shipped dark/light pair goes back untouched — the
+				// plugin promises zero side effects while it has no icon of its own.
+				if (iconState.active === true) setIconEverywhere(base, desiredIconType());
+				else restoreShippedIcons();
 				faviconBase = null;
 				return;
 			}
@@ -628,11 +641,11 @@ window.__ModuleLoader__.load({
 			// stale sibling is exactly what used to outrank the icon we set.
 			const hrefs = iconLinks().map((candidate) => candidate.getAttribute("href"));
 			const ours = hrefs.length > 0 && hrefs.every((value) => typeof value === "string" && value.slice(0, 5) === "data:");
-			const wanted = desiredIconHref();
-			const stale = hrefs.some((value) => value !== wanted);
 			if (effectiveCount() <= 0) {
-				// No badge to draw, but the page must still carry the plugin's icon.
-				if (ours || stale) applyBadgeToFavicon(0);
+				// Carries the custom icon, or puts the shipped pair back. Both writers
+				// only touch a link that actually differs, so this stays a no-op once
+				// the page is correct and cannot re-arm the head observer.
+				applyBadgeToFavicon(0);
 				return;
 			}
 			if (ours || faviconComposing) return; // already showing, or a build is running
