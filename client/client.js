@@ -482,16 +482,54 @@ window.__ModuleLoader__.load({
 			if (iconState.active !== true) return "image/svg+xml";
 			return iconState.png === true ? "image/png" : (iconState.mime || "image/svg+xml");
 		}
-		function iconLink() {
-			let link = document.querySelector('link[rel="icon"]');
-			if (!link) {
-				link = document.createElement("link");
-				link.rel = "icon";
-				link.type = "image/svg+xml";
-				link.href = "/favicon.svg";
-				document.head.appendChild(link);
+		/**
+		 * Every `<link rel="icon">` the document carries, creating one if the page
+		 * has none.
+		 *
+		 * DSH 0.2.x ships TWO of them — a dark and a light one, each behind a
+		 * `media` query. Touching only `querySelector`'s first match left the light
+		 * one pointing at the shipped favicon, and the browser honours the LAST
+		 * suitable candidate, so a custom icon silently failed to apply in light
+		 * mode (the tab kept the platform whale and the feature looked dead).
+		 * Every write below therefore goes to all of them.
+		 */
+		function iconLinks() {
+			const links = Array.from(document.querySelectorAll('link[rel="icon"]'));
+			if (links.length > 0) return links;
+			const link = document.createElement("link");
+			link.rel = "icon";
+			link.type = "image/svg+xml";
+			link.href = "/favicon.svg";
+			document.head.appendChild(link);
+			return [link];
+		}
+		/** Authored href/type, remembered before the first write so a reset can put the shipped pair back. */
+		const ICON_ORIGINALS = new WeakMap();
+		function rememberIcon(link) {
+			if (ICON_ORIGINALS.has(link)) return;
+			ICON_ORIGINALS.set(link, { href: link.getAttribute("href"), type: link.getAttribute("type") });
+		}
+		/** Point every icon link at one image, so no scheme-specific sibling is left stale. */
+		function setIconEverywhere(href, type) {
+			for (const link of iconLinks()) {
+				rememberIcon(link);
+				link.setAttribute("href", href);
+				if (typeof type === "string" && type !== "") link.setAttribute("type", type);
+				else link.removeAttribute("type");
 			}
-			return link;
+		}
+		/** Put the authored hrefs back; a link this plugin created falls back to the platform default. */
+		function restoreShippedIcons() {
+			for (const link of iconLinks()) {
+				const original = ICON_ORIGINALS.get(link);
+				if (original === undefined) continue; // never touched → leave the shipped tag alone
+				link.setAttribute("href", original.href === null ? "/favicon.svg" : original.href);
+				if (original.type === null) link.removeAttribute("type");
+				else link.setAttribute("type", original.type);
+			}
+		}
+		function iconLink() {
+			return iconLinks()[0];
 		}
 		function roundRect(c2d, x, y, w, h) {
 			const r = Math.min(h / 2, w / 2);
@@ -535,15 +573,13 @@ window.__ModuleLoader__.load({
 			});
 		}
 		async function applyBadgeToFavicon(count, size) {
-			const link = iconLink();
 			const base = desiredIconHref();
 			if (count <= 0) {
 				// Nothing to show: make sure the page carries the plugin's own icon
 				// (this also repairs a stale/proxied link that still points elsewhere).
-				if (link.getAttribute("href") !== base) {
-					link.setAttribute("href", base);
-					link.setAttribute("type", desiredIconType());
-				}
+				// EVERY icon link is checked — a single stale scheme-specific sibling
+				// would outrank the one we fix.
+				if (iconLinks().some((candidate) => candidate.getAttribute("href") !== base)) setIconEverywhere(base, desiredIconType());
 				faviconBase = null;
 				return;
 			}
@@ -566,8 +602,7 @@ window.__ModuleLoader__.load({
 				const dh = ih * scale;
 				c2d.drawImage(img, (FAVICON_SIZE - dw) / 2, (FAVICON_SIZE - dh) / 2, dw, dh);
 				drawFaviconBadge(c2d, FAVICON_SIZE, count, badgeScale(size));
-				link.setAttribute("href", canvas.toDataURL("image/png"));
-				link.setAttribute("type", "image/png");
+				setIconEverywhere(canvas.toDataURL("image/png"), "image/png");
 			} catch (error) {
 				// Never silent: a failure here is invisible in the UI (the tab simply
 				// keeps its previous icon), which once cost a whole debugging session.
@@ -588,13 +623,16 @@ window.__ModuleLoader__.load({
 		 * composite was replaced and has to be rebuilt from the new base.
 		 */
 		function reconcileFavicon() {
-			const link = document.querySelector('link[rel="icon"]');
-			const href = link === null ? null : link.getAttribute("href");
-			const ours = typeof href === "string" && href.slice(0, 5) === "data:";
+			// Inspect EVERY icon link: 0.2.x ships two (dark/light), and a sibling
+			// left stale by anything outside the plugin must be repaired too — that
+			// stale sibling is exactly what used to outrank the icon we set.
+			const hrefs = iconLinks().map((candidate) => candidate.getAttribute("href"));
+			const ours = hrefs.length > 0 && hrefs.every((value) => typeof value === "string" && value.slice(0, 5) === "data:");
 			const wanted = desiredIconHref();
+			const stale = hrefs.some((value) => value !== wanted);
 			if (effectiveCount() <= 0) {
 				// No badge to draw, but the page must still carry the plugin's icon.
-				if (ours || href !== wanted) applyBadgeToFavicon(0);
+				if (ours || stale) applyBadgeToFavicon(0);
 				return;
 			}
 			if (ours || faviconComposing) return; // already showing, or a build is running
@@ -1169,30 +1207,18 @@ window.__ModuleLoader__.load({
 			// visible in this very tab; other tabs pick it up on their next render.
 			const applyLive = React.useCallback((s) => {
 				if (!s || s.active !== true) return;
-				const link = document.querySelector('link[rel="icon"]');
 				const href = s.png === true ? `/icon-custom-192.png?v=${s.rev}` : `/icon-custom.svg?v=${s.rev}`;
 				const type = s.png === true ? "image/png" : (s.mime || "image/svg+xml");
-				if (link) {
-					link.setAttribute("href", href);
-					link.setAttribute("type", type);
-				} else {
-					const el = document.createElement("link");
-					el.rel = "icon";
-					el.type = type;
-					el.href = href;
-					document.head.appendChild(el);
-				}
+				setIconEverywhere(href, type);
 				// The base icon just changed: rebuild the composite from it.
 				refreshFaviconBase();
 			}, []);
 
-			// When cleared, point the icon back at the platform default.
+			// When cleared, put the shipped dark/light pair back. Restoring the
+			// authored hrefs (rather than forcing one href on every link) keeps the
+			// platform's scheme-aware icons working after a reset.
 			const applyDefault = React.useCallback(() => {
-				const link = document.querySelector('link[rel="icon"]');
-				if (link) {
-					link.setAttribute("href", "/favicon.svg");
-					link.setAttribute("type", "image/svg+xml");
-				}
+				restoreShippedIcons();
 				refreshFaviconBase();
 			}, []);
 
