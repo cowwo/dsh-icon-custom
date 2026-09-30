@@ -62,7 +62,7 @@ window.__ModuleLoader__.load({
 			unreadPanelOther: "其他",
 			workspaceDotLabel: "在工作区和会话行上显示红点(实验)",
 			workspaceDotHint: "在侧栏工作区那一行的文件夹图标上点一个小红点。这一项是贴着页面结构做的,DSH 升级后可能失效;失效时只会变成\"不显示\",不会影响红点数字、清单、跳转这些功能,随时可以关掉它。",
-			badgeTestHint: "真实未读 = 有会话发生了上面勾选的情况、而且你还没看过它(打开该会话即视为已读)。正在看的会话和子代理不计。手动模式:自己填数字试看效果。刷新页面后回到真实未读。"
+			badgeTestHint: "真实未读 = 有会话发生了上面勾选的情况、而且你还没看过它(打开该会话即视为已读)。你正开着的会话也算——窗口可能被最小化、页面可能切到后台,这里无从判断你在不在看,所以不做这个区分。只有子代理不计。手动模式:自己填数字试看效果。刷新页面后回到真实未读。"
 		};
 		const en = {
 			nav: "Favicon",
@@ -117,7 +117,7 @@ window.__ModuleLoader__.load({
 			unreadPanelOther: "Other",
 			workspaceDotLabel: "Dots on workspace and session rows (experimental)",
 			workspaceDotHint: "Adds a small red dot to the folder icon of each workspace row. This one reads the page structure, so a DSH upgrade may break it; when it does it simply stops showing, never affecting the counts, the list, or navigation. Turn it off any time.",
-			badgeTestHint: "Real unread = a session ended for one of the checked reasons and you have not looked at it yet (opening a session marks it read). The session you are viewing and sub-agents never count. Manual = type a number to preview. Resets to Real on reload."
+			badgeTestHint: "Real unread = a session ended for one of the checked reasons and you have not looked at it yet (opening a session marks it read). The session you are viewing counts too — the window may be minimised or the page in the background, so this half cannot tell whether you are looking, and does not pretend to. Only sub-agents never count. Manual = type a number to preview. Resets to Real on reload."
 		};
 		//#endregion
 
@@ -329,8 +329,15 @@ window.__ModuleLoader__.load({
 		/**
 		 * How many sessions deserve the badge right now: endings whose reason is
 		 * enabled and that this browser has not seen since, plus sessions waiting
-		 * for you (when that source is enabled). Sub-agent sessions and the session
-		 * you are looking at never count.
+		 * for you (when that source is enabled). Only sub-agent sessions never count.
+		 *
+		 * The session you are LOOKING AT counts too. It used to be excluded, on the
+		 * theory that "you have it open, so you have seen it" — but that premise is
+		 * not knowable from here: the window may be minimised, the tab may be in the
+		 * background, the page may be on another desktop. The browser half cannot
+		 * tell "watching" from "left open", and a rule that cannot tell two cases
+		 * apart should not pretend to: a session counts from the moment it ends until
+		 * it is opened again. Leaving and re-entering it is what clears the entry.
 		 * @param list - the session list snapshot (may be absent).
 		 * @param pending - the pending-interaction map (may be absent).
 		 * @param config - the unread rule to apply.
@@ -344,7 +351,6 @@ window.__ModuleLoader__.load({
 			/** { id, title, waiting, kind, at } — newest first, "in wait" ahead of "ended". */
 			const hits = [];
 			const ids = new Set();
-			const current = currentSessionId(list);
 			const byId = list !== null && typeof list === "object" && list.byId !== null && typeof list.byId === "object" ? list.byId : {};
 			const titleOf = (id, entry) => (entry !== null && typeof entry === "object" && typeof entry.displayTitle === "string" && entry.displayTitle !== "" ? entry.displayTitle : id);
 			// Which workspace the session lives in. The sidebar's own workspace rows are
@@ -363,7 +369,6 @@ window.__ModuleLoader__.load({
 					const entry = byId[id];
 					if (entry === null || typeof entry !== "object") continue;
 					if (entry.origin === "subagent") continue;
-					if (id === current) continue;
 					const values = entry.projectionValues;
 					const value = values !== null && typeof values === "object" ? values[LAST_TURN_END_KEY] : undefined;
 					if (value === null || typeof value !== "object") continue;
@@ -380,7 +385,6 @@ window.__ModuleLoader__.load({
 			if (config === null || typeof config !== "object" || config.pending !== false) {
 				if (pending !== null && pending !== undefined && typeof pending.forEach === "function") {
 					pending.forEach((value, id) => {
-						if (id === current) return;
 						const kind = value !== null && typeof value === "object" && typeof value.kind === "string" ? value.kind : "";
 						if (ids.has(id)) {
 							// Already unread by its last turn: it is waiting too, which wins.
