@@ -1229,7 +1229,8 @@ window.__ModuleLoader__.load({
 					event.preventDefault();
 					event.stopPropagation();
 					const rect = node.getBoundingClientRect();
-					toggleUnreadPanel({ left: rect.left, top: rect.top });
+					// `bottom` is what the panel drops below; see unreadPanelPlacement.
+					toggleUnreadPanel({ left: rect.left, top: rect.top, bottom: rect.bottom });
 				});
 			}
 			const count = effectiveCount();
@@ -1284,6 +1285,52 @@ window.__ModuleLoader__.load({
 			headerBadgeHost = null;
 			headerBadgeHostPosition = "";
 		}
+		/** Gap between the panel and whatever it is anchored to. */
+		const UNREAD_PANEL_GAP = 6;
+		/** Breathing room from the window edges. */
+		const UNREAD_PANEL_MARGIN = 8;
+		/** The panel's practical width (between its minWidth and maxWidth below). */
+		const UNREAD_PANEL_WIDTH = 300;
+		/** How tall the scrolling session list may get before it scrolls. */
+		const UNREAD_PANEL_LIST_MAX = 320;
+
+		/**
+		 * Where the unread panel goes, in viewport coordinates.
+		 *
+		 * It opens DOWNWARD from the badge. The original math pinned the panel's
+		 * BOTTOM edge just above the anchor — correct while the trigger sat in the
+		 * sidebar footer, and wrong the moment that trigger moved to the section
+		 * header: the same formula then parked the panel's bottom near the top of the
+		 * window and grew the panel upward, off the top of the screen (the title and
+		 * the first workspace heading were what got cut off). Anchoring on the
+		 * anchor's `bottom` is what drops it below the badge instead.
+		 *
+		 * Horizontally it stays clear of the sidebar: the panel is a frame-wide
+		 * overlay, and covering the sidebar — and the very badge that opened it — was
+		 * the other half of the complaint.
+		 * @param anchor - the badge's viewport rect (`{left, top, bottom}`), or null.
+		 * @param sidebarRight - the browsing region's right edge, or null.
+		 * @param viewportWidth - window width.
+		 * @param viewportHeight - window height.
+		 * @returns `{ left, top, listMaxHeight }` in viewport pixels.
+		 */
+		function unreadPanelPlacement(anchor, sidebarRight, viewportWidth, viewportHeight) {
+			let left = UNREAD_PANEL_MARGIN;
+			let top = UNREAD_PANEL_MARGIN;
+			if (anchor !== null && typeof anchor === "object") {
+				if (typeof anchor.left === "number") left = anchor.left;
+				const below = typeof anchor.bottom === "number" ? anchor.bottom : anchor.top;
+				if (typeof below === "number") top = below + UNREAD_PANEL_GAP;
+			}
+			if (typeof sidebarRight === "number" && sidebarRight > 0) left = Math.max(left, sidebarRight + UNREAD_PANEL_GAP);
+			left = Math.max(UNREAD_PANEL_MARGIN, Math.min(left, viewportWidth - UNREAD_PANEL_WIDTH - UNREAD_PANEL_MARGIN));
+			top = Math.max(UNREAD_PANEL_MARGIN, top);
+			// Never taller than what is left below the panel's own top, so a long list
+			// scrolls inside the panel instead of pushing it off the bottom edge.
+			const listMaxHeight = Math.max(120, Math.min(UNREAD_PANEL_LIST_MAX, viewportHeight - top - 72));
+			return { left: Math.round(left), top: Math.round(top), listMaxHeight: Math.round(listMaxHeight) };
+		}
+
 		/**
 		 * The list behind that number, in the frame-wide overlay layer so it escapes
 		 * the sidebar's clipping and scroll container. Clicking a row opens that
@@ -1312,22 +1359,26 @@ window.__ModuleLoader__.load({
 			if (!open) return null;
 			const t = props.t;
 			const anchor = unreadPanelAnchor;
+			// Measured, not assumed: the panel has to clear whatever width the sidebar
+			// currently has (it is resizable and collapsible).
+			let sidebarRight = null;
+			try {
+				const region = workspaceDotContainer();
+				if (region !== null) sidebarRight = region.getBoundingClientRect().right;
+			} catch { /* measurement is best effort; the margin fallback still applies */ }
+			const place = unreadPanelPlacement(anchor, sidebarRight, window.innerWidth, window.innerHeight);
 			const style = {
-				position: "fixed", left: "12px", bottom: "52px", zIndex: 60, pointerEvents: "auto",
+				position: "fixed", left: place.left + "px", top: place.top + "px", zIndex: 60, pointerEvents: "auto",
 				minWidth: "240px", maxWidth: "340px", padding: "8px", borderRadius: "12px",
 				border: "1px solid var(--dsw-alias-border-l2)", background: "var(--dsw-alias-bg-layer-1)",
 				boxShadow: "0 10px 30px rgba(0,0,0,.18)", color: "var(--dsw-alias-label-primary)", fontSize: "12px"
 			};
-			if (anchor !== null && typeof anchor === "object") {
-				style.left = Math.max(8, Math.round(anchor.left)) + "px";
-				style.bottom = Math.max(8, Math.round(window.innerHeight - anchor.top + 6)) + "px";
-			}
 			const items = Array.isArray(snapshot.items) ? snapshot.items : [];
 			return React.createElement("div", { "data-icon-custom-unread": "1", style },
 				React.createElement("div", { style: { fontWeight: 600, padding: "2px 6px 8px" } }, t("unreadPanelTitle")),
 				items.length === 0
 					? React.createElement("div", { style: { padding: "2px 6px 8px", opacity: 0.7 } }, t("unreadPanelEmpty"))
-					: React.createElement("div", { style: { display: "flex", flexDirection: "column", maxHeight: "320px", overflowY: "auto" } },
+					: React.createElement("div", { style: { display: "flex", flexDirection: "column", maxHeight: place.listMaxHeight + "px", overflowY: "auto" } },
 						groupUnreadByWorkspace(items).map((group) => React.createElement("div", { key: group.where === "" ? "\u0000none" : group.where },
 							React.createElement("div", { style: { padding: "7px 8px 3px", fontSize: "11px", fontWeight: 600, opacity: 0.55, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
 								group.where === "" ? t("unreadPanelOther") : group.where
