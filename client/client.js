@@ -1024,6 +1024,14 @@ window.__ModuleLoader__.load({
 		 * and the same failure posture as the workspace-row dots: decorative, never
 		 * throws, and after repeated failures it gives up on its own with one warning.
 		 *
+		 * Placement is measured, not inherited, because the shipped CSS forbids the
+		 * obvious approach: `.sectionHeader` is 36px tall with `overflow:hidden`, the
+		 * label inside it is a 20px line box that is ALSO `overflow:hidden`, so a badge
+		 * parented to the label and raised clear of the glyph is clipped to a sliver by
+		 * the label's own overflow. The badge is therefore a SIBLING of the label,
+		 * absolutely positioned over the label's top-right corner from its measured
+		 * rect, and clamped so it never leaves the header's 36px box.
+		 *
 		 * The count is shown for EVERY value including zero: a grey 0 keeps the
 		 * position from jumping, and doubles as the only way back to the panel once
 		 * the old sidebar-foot button is gone.
@@ -1034,8 +1042,14 @@ window.__ModuleLoader__.load({
 		const HEAD_BADGE_MAX_FAILURES = 40;
 		/** How many ancestors to walk up looking for the header row. */
 		const HEAD_BADGE_MAX_STEPS = 6;
+		/** Raise above the label's top edge; the header only leaves 8px of headroom. */
+		const HEAD_BADGE_RAISE = 7;
+		/** Overhang past the label's right edge. */
+		const HEAD_BADGE_OVERHANG = 9;
 		let headerBadgeHost = null;
 		let headerBadgeHostPosition = "";
+		let headerBadgeObserved = null;
+		let headerBadgeObserver = null;
 		let headerBadgeFailures = 0;
 		let headerBadgeGivenUp = false;
 		/** Locale binder, installed by `apply()` so the injected node can label itself. */
@@ -1050,12 +1064,14 @@ window.__ModuleLoader__.load({
 		 *     follows light/dark without naming either;
 		 *   * the ring is the sidebar's own fill — that is what makes a badge sitting
 		 *     on top of a glyph read as a badge instead of a smudge.
+		 * The hit area grows sideways and downward only: there are just 8px above the
+		 * label, so anything reaching further up is clipped by the header's overflow.
 		 */
 		const HEAD_BADGE_CSS = [
-			`[${HEAD_BADGE_ATTR}]{position:absolute;top:-11px;right:-13px;width:23px;height:23px;padding:0;border:0;background:transparent;display:flex;align-items:center;justify-content:center;border-radius:7px;cursor:pointer;z-index:2;font:inherit}`,
-			`[${HEAD_BADGE_ATTR}]:hover{background:rgba(127,127,127,.16)}`,
-			`[${HEAD_BADGE_ATTR}]>span{display:flex;align-items:center;justify-content:center;min-width:15px;height:15px;padding:0 3.5px;box-sizing:border-box;border-radius:999px;background:#e5484d;color:#fff;font-size:9.5px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em;box-shadow:0 0 0 1.5px var(--dsw-specific-sidebar-fill,#fff);pointer-events:none}`,
-			`[${HEAD_BADGE_ATTR}][data-zero="1"]>span{background:var(--dsw-alias-state-idle-primary,#b6bcc4)}`
+			`[${HEAD_BADGE_ATTR}]{position:absolute;display:none;align-items:center;justify-content:center;min-width:15px;height:15px;padding:0 3.5px;box-sizing:border-box;border:0;border-radius:999px;background:#e5484d;color:#fff;font:inherit;font-size:9.5px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em;cursor:pointer;z-index:3;box-shadow:0 0 0 1.5px var(--dsw-specific-sidebar-fill,#fff)}`,
+			`[${HEAD_BADGE_ATTR}]::after{content:"";position:absolute;inset:0 -5px -5px -5px;border-radius:999px}`,
+			`[${HEAD_BADGE_ATTR}]:hover{filter:brightness(1.12)}`,
+			`[${HEAD_BADGE_ATTR}][data-zero="1"]{background:var(--dsw-alias-state-idle-primary,#b6bcc4)}`
 		].join("");
 
 		/** Install the badge rules once per page. */
@@ -1070,7 +1086,7 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * The section-header label inside the browsing region.
+		 * The section-header row and the label inside it.
 		 *
 		 * The title TEXT is deliberately not matched: it flips between 工作区 and 会话
 		 * with the group-by mode and is localized, so any string table would be both
@@ -1079,14 +1095,11 @@ window.__ModuleLoader__.load({
 		 * `data-slot` on those), the header row's first button is the search control,
 		 * and the label is the row's first text-bearing child that owns no button.
 		 * @param container - the browsing region root.
-		 * @returns the label element, or null when this build's DOM is not recognised.
+		 * @returns `{ row, label }`, or null when this build's DOM is not recognised.
 		 */
-		function sectionHeaderLabel(container) {
-			// The first button that is NOT ours. Loading order matters: our badge sits
-			// inside the label, which precedes the search control in document order, so
-			// a plain `querySelector("button")` would return the badge itself from the
-			// second paint onward — and then the row anchor below would resolve to the
-			// label instead of the header row, making the locator lose its own host.
+		function sectionHeaderParts(container) {
+			// Our own badge is a button too; never let it stand in for the search
+			// control, or the row anchor would resolve to the wrong element.
 			let firstButton = null;
 			for (const candidate of container.querySelectorAll("button")) {
 				if (candidate.getAttribute(HEAD_BADGE_ATTR) !== null) continue;
@@ -1098,14 +1111,9 @@ window.__ModuleLoader__.load({
 			for (let step = 0; step < HEAD_BADGE_MAX_STEPS && row !== null && row !== container; step++) {
 				for (const child of row.children) {
 					if (child === firstButton || child.contains(firstButton)) continue;
-					// Already carrying our badge? Then this IS the label — checked BEFORE
-					// the "owns no button" rule below, because our own injected button
-					// would otherwise disqualify the very element we injected it into and
-					// every repaint after the first would silently give up.
-					if (child.querySelector(`[${HEAD_BADGE_ATTR}]`) !== null) return child;
 					if (child.tagName === "BUTTON") continue;
 					if (child.querySelector("button") !== null) continue;
-					if ((child.textContent ?? "").trim() !== "") return child;
+					if ((child.textContent ?? "").trim() !== "") return { row, label: child };
 				}
 				row = row.parentElement;
 			}
@@ -1125,36 +1133,42 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * Reconcile the header badge with the current count.
+		 * Reconcile the header badge with the current count and the label's position.
 		 *
 		 * Driven by the same mutation watchdog as the row dots, so it must be
 		 * idempotent: it writes only what actually differs, or the observer that
-		 * called it would re-arm on its own output.
+		 * called it would re-arm on its own output. Geometry is read from the live
+		 * rects, so the badge follows a sidebar resize, a locale change and the
+		 * label's own collapse animation without any hardcoded offsets.
 		 */
 		function paintHeaderBadge() {
 			if (headerBadgeGivenUp) return;
 			const container = workspaceDotContainer();
 			if (container === null) return; // start-up race, not a failure
-			const label = sectionHeaderLabel(container);
-			if (label === null) { noteHeaderBadgeFailure("找不到分区标题"); return; }
+			const parts = sectionHeaderParts(container);
+			if (parts === null) { noteHeaderBadgeFailure("找不到分区标题"); return; }
+			const row = parts.row;
+			const label = parts.label;
 			ensureHeaderBadgeStyle();
-			if (headerBadgeHost !== label) {
+			if (headerBadgeHost !== row) {
 				if (headerBadgeHost !== null) { try { headerBadgeHost.style.position = headerBadgeHostPosition; } catch {} }
-				headerBadgeHost = label;
-				headerBadgeHostPosition = label.style.position;
-				try { if (window.getComputedStyle(label).position === "static") label.style.position = "relative"; } catch {}
+				headerBadgeHost = row;
+				headerBadgeHostPosition = row.style.position;
+				try { if (window.getComputedStyle(row).position === "static") row.style.position = "relative"; } catch {}
 			}
-			let node = label.querySelector(`[${HEAD_BADGE_ATTR}]`);
+			let node = row.querySelector(`[${HEAD_BADGE_ATTR}]`);
 			if (node === null) {
 				node = document.createElement("button");
 				node.type = "button";
 				node.setAttribute(HEAD_BADGE_ATTR, "1");
-				label.appendChild(node);
+				// Appended AFTER the shipped controls, so it can never be mistaken for
+				// the header's first button.
+				row.appendChild(node);
 			}
 			if (node.getAttribute(HEAD_BADGE_WIRED) !== "1") {
 				node.setAttribute(HEAD_BADGE_WIRED, "1");
 				node.addEventListener("click", (event) => {
-					// The label is the sidebar's own; keep the click to ourselves.
+					// The row belongs to the sidebar; keep the click to ourselves.
 					event.preventDefault();
 					event.stopPropagation();
 					const rect = node.getBoundingClientRect();
@@ -1172,25 +1186,47 @@ window.__ModuleLoader__.load({
 					node.setAttribute("title", spoken);
 				}
 			}
-			let pill = node.firstElementChild;
-			if (pill === null || pill.tagName !== "SPAN") {
-				pill = document.createElement("span");
-				pill.setAttribute("aria-hidden", "true");
-				node.appendChild(pill);
+			if (node.textContent !== text) node.textContent = text;
+			// The label collapses to nothing while the search box is open; the badge
+			// has no meaning then, and the label's own visibility cannot hide it
+			// because it is a sibling.
+			const rowRect = row.getBoundingClientRect();
+			const labelRect = label.getBoundingClientRect();
+			if (labelRect.width < 8) {
+				if (node.style.display !== "none") node.style.display = "none";
+			} else {
+				const width = typeof node.offsetWidth === "number" && node.offsetWidth > 0 ? node.offsetWidth : 15;
+				const left = Math.round(labelRect.right - rowRect.left - width + HEAD_BADGE_OVERHANG);
+				// Clamped: the header clips its overflow, and only ~8px sit above the label.
+				const top = Math.max(0, Math.round(labelRect.top - rowRect.top - HEAD_BADGE_RAISE));
+				if (node.style.left !== `${left}px`) node.style.left = `${left}px`;
+				if (node.style.top !== `${top}px`) node.style.top = `${top}px`;
+				if (node.style.display !== "flex") node.style.display = "flex";
 			}
-			if (pill.textContent !== text) pill.textContent = text;
+			// The label animates its own width; follow it instead of waiting for the
+			// next mutation, which a CSS transition never produces.
+			if (typeof window.ResizeObserver === "function") {
+				if (headerBadgeObserver === null) headerBadgeObserver = new window.ResizeObserver(() => { paintHeaderBadge(); });
+				if (headerBadgeObserved !== label) {
+					try { headerBadgeObserver.disconnect(); headerBadgeObserver.observe(label); headerBadgeObserved = label; } catch {}
+				}
+			}
 		}
 
-		/** Take the badge back out and restore the label's own positioning. */
+		/** Take the badge back out and restore the row's own positioning. */
 		function clearHeaderBadge() {
 			try { document.querySelectorAll(`[${HEAD_BADGE_ATTR}]`).forEach((node) => node.remove()); } catch {}
+			if (headerBadgeObserver !== null) {
+				try { headerBadgeObserver.disconnect(); } catch {}
+				headerBadgeObserver = null;
+				headerBadgeObserved = null;
+			}
 			if (headerBadgeHost !== null) {
 				try { headerBadgeHost.style.position = headerBadgeHostPosition; } catch {}
 			}
 			headerBadgeHost = null;
 			headerBadgeHostPosition = "";
 		}
-
 		/**
 		 * The list behind that number, in the frame-wide overlay layer so it escapes
 		 * the sidebar's clipping and scroll container. Clicking a row opens that
