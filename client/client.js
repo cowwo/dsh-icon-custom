@@ -272,21 +272,67 @@ window.__ModuleLoader__.load({
 			return () => { unreadConfigListeners.delete(fn); };
 		}
 
-		const SEEN_STORE_KEY = "dsh-icon-custom.unread-seen.v1";
+		/**
+		 * The seen watermark lives in the HOST's clock domain.
+		 *
+		 * A turn end arrives stamped with the Host's `turn/end.time`; a mark written
+		 * from the browser's `Date.now()` only lines up while both clocks agree. A
+		 * browser a few seconds behind the Host therefore wrote marks that never
+		 * reached `endAt`, so the dot could not be cleared by entering the session at
+		 * all — the one failure users report as "点进去也不消". Marks now store the
+		 * `endAt` they acknowledge, and `lastActiveAt` stores a host-domain time, so
+		 * every comparison in `collectUnread` stays inside one clock.
+		 */
+		const SEEN_STORE_KEY = "dsh-icon-custom.unread-seen.v2";
+		/** 0.10.1 and earlier wrote browser timestamps here; migrated once. */
+		const LEGACY_SEEN_STORE_KEY = "dsh-icon-custom.unread-seen.v1";
 		const SEEN_MAX = 400;
+		/** Host clock minus browser clock, from the last Host sample; null until known. */
+		let hostClockOffset = null;
+		/** This browser's clock expressed in the Host's domain (best effort). */
+		function hostNow() {
+			return Date.now() + (hostClockOffset === null ? 0 : hostClockOffset);
+		}
 		function loadSeenState() {
 			try {
 				const raw = JSON.parse(window.localStorage.getItem(SEEN_STORE_KEY) || "null");
-				if (raw === null || typeof raw !== "object") return { lastActiveAt: 0, seen: {} };
-				const seen = raw.seen !== null && typeof raw.seen === "object" ? raw.seen : {};
-				return { lastActiveAt: typeof raw.lastActiveAt === "number" ? raw.lastActiveAt : 0, seen };
-			} catch { return { lastActiveAt: 0, seen: {} }; }
+				if (raw !== null && typeof raw === "object" && raw.domain === "host") {
+					const seen = raw.seen !== null && typeof raw.seen === "object" ? raw.seen : {};
+					return { domain: "host", lastActiveAt: typeof raw.lastActiveAt === "number" ? raw.lastActiveAt : 0, seen };
+				}
+				const legacy = JSON.parse(window.localStorage.getItem(LEGACY_SEEN_STORE_KEY) || "null");
+				if (legacy !== null && typeof legacy === "object") {
+					const seen = legacy.seen !== null && typeof legacy.seen === "object" ? legacy.seen : {};
+					return { domain: "browser", lastActiveAt: typeof legacy.lastActiveAt === "number" ? legacy.lastActiveAt : 0, seen };
+				}
+			} catch { /* fall through to an empty store */ }
+			return { domain: "host", lastActiveAt: 0, seen: {} };
 		}
 		const seenState = loadSeenState();
-		/** When this browser last had the app open before this page load. */
+		/** When this browser last had the app open before this page load (host domain). */
 		const seenBootAt = seenState.lastActiveAt > 0 ? seenState.lastActiveAt : 0;
 		function saveSeenState() {
-			try { window.localStorage.setItem(SEEN_STORE_KEY, JSON.stringify(seenState)); } catch {}
+			try {
+				window.localStorage.setItem(SEEN_STORE_KEY, JSON.stringify({ domain: "host", lastActiveAt: seenState.lastActiveAt, seen: seenState.seen }));
+			} catch {}
+		}
+		/**
+		 * Learn the Host↔browser clock offset from a Host timestamp, and fold a
+		 * legacy browser-domain store into the host domain. Idempotent: the fold
+		 * happens once, on the first sample that carries a usable `hostNow`.
+		 * @param hostAt - the Host's `Date.now()`, or anything else (ignored).
+		 */
+		function noteHostClock(hostAt) {
+			if (typeof hostAt !== "number" || !Number.isFinite(hostAt) || hostAt <= 0) return;
+			const offset = hostAt - Date.now();
+			hostClockOffset = offset;
+			if (seenState.domain === "host") return;
+			seenState.domain = "host";
+			if (seenState.lastActiveAt > 0) seenState.lastActiveAt += offset;
+			for (const id of Object.keys(seenState.seen)) {
+				if (typeof seenState.seen[id] === "number") seenState.seen[id] += offset;
+			}
+			saveSeenState();
 		}
 		function pruneSeenState() {
 			const ids = Object.keys(seenState.seen);
@@ -294,10 +340,20 @@ window.__ModuleLoader__.load({
 			ids.sort((a, b) => seenState.seen[b] - seenState.seen[a]);
 			for (const id of ids.slice(SEEN_MAX)) delete seenState.seen[id];
 		}
-		/** Record that this browser is looking at a session right now. */
-		function noteSeen(sessionId) {
+		/**
+		 * Record that this browser has seen a session up to `seenAt` — the
+		 * host-domain `endAt` being acknowledged. Marks never move backwards, so a
+		 * late attempt cannot undo a newer one.
+		 * @param sessionId - the session that was looked at.
+		 * @param seenAt - host-domain watermark to store; defaults to the Host's now.
+		 * @returns whether the mark actually advanced.
+		 */
+		function noteSeen(sessionId, seenAt) {
 			if (typeof sessionId !== "string" || sessionId === "") return false;
-			seenState.seen[sessionId] = Date.now();
+			const mark = typeof seenAt === "number" && Number.isFinite(seenAt) ? seenAt : hostNow();
+			const previous = seenState.seen[sessionId];
+			if (typeof previous === "number" && previous >= mark) return false;
+			seenState.seen[sessionId] = mark;
 			return true;
 		}
 		/**
@@ -307,7 +363,7 @@ window.__ModuleLoader__.load({
 		 * @returns whether anything was learned (callers persist only then).
 		 */
 		function ensureSeenBaseline(ids) {
-			const fallback = seenBootAt > 0 ? seenBootAt : Date.now();
+			const fallback = seenBootAt > 0 ? seenBootAt : hostNow();
 			let changed = false;
 			for (const id of ids) {
 				if (typeof id !== "string" || id === "") continue;
@@ -318,30 +374,46 @@ window.__ModuleLoader__.load({
 			return changed;
 		}
 		/**
-		 * The session the main view is showing.
+		 * Every session the main view is showing.
 		 *
-		 * DSH 0.2.x carries NO `current` field in the session-list snapshot — it is
-		 * written with exactly `ids` / `byId` / `phase` / `projectionsBySession`. The
-		 * official signal is the row's `retainedBy.mainView` retention count, the same
-		 * one ui-layout's DocumentTitle, ui-cordis, ui-open-in-app and ui-session read.
-		 * Reading `list.current` here made `noteSeen()` a no-op, so the seen watermark
-		 * never advanced and an unread dot could never be cleared by opening the
-		 * session. Runtimes that do expose `current` are still honoured first.
+		 * The official signal is the row's `retainedBy.mainView` retention count, the
+		 * same one ui-layout's DocumentTitle, ui-cordis, ui-open-in-app and ui-session
+		 * read (`list.current` is honoured first for runtimes that expose it).
+		 *
+		 * It returns ALL of them, not one. The pane retains the incoming session
+		 * BEFORE it releases the outgoing one, and a retention that outlives its pane
+		 * can leave an old session looking "current" for good — and picking a single
+		 * id then meant the session you were actually reading was never marked read:
+		 * the dot stayed red however long you stayed in it. Each retained session
+		 * gets its own stay clock instead.
 		 * @param list - the session list snapshot (may be absent).
-		 * @returns the id being viewed, or undefined.
+		 * @returns the ids being viewed, in list order; `[]` when there are none.
 		 */
-		function currentSessionId(list) {
-			if (list === null || typeof list !== "object") return undefined;
-			if (typeof list.current === "string" && list.current !== "") return list.current;
+		function currentSessionIds(list) {
+			if (list === null || typeof list !== "object") return [];
+			if (typeof list.current === "string" && list.current !== "") return [list.current];
 			const byId = list.byId;
-			if (byId === null || typeof byId !== "object") return undefined;
+			if (byId === null || typeof byId !== "object") return [];
+			const ids = [];
 			for (const session of Object.values(byId)) {
 				if (session === null || typeof session !== "object") continue;
 				const retainedBy = session.retainedBy;
 				const count = retainedBy !== null && typeof retainedBy === "object" ? retainedBy.mainView : undefined;
-				if (typeof count === "number" && count > 0) return session.id;
+				if (typeof count === "number" && count > 0 && typeof session.id === "string" && session.id !== "") ids.push(session.id);
 			}
-			return undefined;
+			return ids;
+		}
+		/**
+		 * One session's last `turn/end` timestamp (host domain), or 0 when it has
+		 * none. The projection is what the Host folded; an unknown reason still
+		 * carries the time.
+		 * @param entry - the session-list row (may be absent).
+		 * @returns the epoch milliseconds, or 0.
+		 */
+		function lastTurnEndAt(entry) {
+			const values = entry !== null && typeof entry === "object" ? entry.projectionValues : undefined;
+			const value = values !== null && typeof values === "object" ? values[LAST_TURN_END_KEY] : undefined;
+			return value !== null && typeof value === "object" && typeof value.endAt === "number" ? value.endAt : 0;
 		}
 		/**
 		 * What the "stay here long enough" timer is armed for, or "" when nothing
@@ -360,11 +432,7 @@ window.__ModuleLoader__.load({
 		function stayKeyFor(sessionId, list) {
 			if (typeof sessionId !== "string" || sessionId === "") return "";
 			const byId = list !== null && typeof list === "object" && list.byId !== null && typeof list.byId === "object" ? list.byId : {};
-			const entry = byId[sessionId];
-			const values = entry !== null && typeof entry === "object" ? entry.projectionValues : undefined;
-			const value = values !== null && typeof values === "object" ? values[LAST_TURN_END_KEY] : undefined;
-			const endAt = value !== null && typeof value === "object" && typeof value.endAt === "number" ? value.endAt : 0;
-			return `${sessionId}\u0000${endAt}`;
+			return `${sessionId}\u0000${lastTurnEndAt(byId[sessionId])}`;
 		}
 		/**
 		 * How many sessions deserve the badge right now: endings whose reason is
@@ -834,6 +902,11 @@ window.__ModuleLoader__.load({
 			if (workspaceDotFailures < WS_MAX_FAILURES || workspaceDotGivenUp) return;
 			workspaceDotGivenUp = true;
 			try { console.warn("dsh-icon-custom: 工作区红点连续失败,本次会话内已自动关闭,可在设置里关掉这一项。"); } catch {}
+			// Take the markers OUT rather than leaving them frozen: a stale red dot
+			// that no longer reflects the rule (or that can never be cleared) is worse
+			// than no marker at all, and "breaks down to not showing" is this feature's
+			// stated posture.
+			clearWorkspaceDots();
 		}
 		/** The marker already sitting in this host for that key, or null. */
 		function existingMarker(host, attribute, key) {
@@ -898,6 +971,38 @@ window.__ModuleLoader__.load({
 			if (rect.height < WS_ROW_MIN_H || rect.height > WS_ROW_MAX_H || rect.width < WS_ROW_MIN_W) return null;
 			return { title: label, row };
 		}
+		/**
+		 * The DOM row of one session, by the official row key.
+		 *
+		 * ui-workspace stamps every row with `data-row-key` (`session:<id>`,
+		 * `workspace:<id>`, `overflow:<id>`), which is the only stable, unambiguous
+		 * handle on a row: titles are neither unique (two sessions can share one) nor
+		 * stable (a generated title lands later). Matching by title text used to find
+		 * two rows and refuse, so a session whose title collided with another's could
+		 * never be marked at all.
+		 * @param container - the browsing region root.
+		 * @param id - the session id.
+		 * @returns the row element, or null.
+		 */
+		function sessionRowElement(container, id) {
+			if (typeof id !== "string" || id === "") return null;
+			try { return container.querySelector(`[data-row-key="session:${id}"]`); } catch { return null; }
+		}
+		/**
+		 * Where one session's marker goes: the tight title holder INSIDE that
+		 * session's own row. The row is found by `data-row-key`; the title inside it
+		 * is still matched by text, because that is the element the marker hangs off.
+		 * Falls back to the old whole-region title match on a build without row keys.
+		 * @returns `{ title, row }`, or null when this row cannot be trusted.
+		 */
+		function sessionRowTarget(container, id, title) {
+			const row = sessionRowElement(container, id);
+			if (row !== null) {
+				const inside = labelElementFor(row, title);
+				return inside === null ? null : titleTargetFor(inside, title);
+			}
+			return titleTargetFor(labelElementFor(container, title), title);
+		}
 		function paintWorkspaceDots() {
 			if (workspaceDotGivenUp) return;
 			const enabled = unreadConfig.workspaceDot !== false;
@@ -950,8 +1055,7 @@ window.__ModuleLoader__.load({
 				// Session rows: the marker rides inline right after the title, so it stays
 				// beside the name whatever the timestamp happens to say.
 				for (const entry of wantedRows) {
-					const label = labelElementFor(container, entry.title);
-					const target = titleTargetFor(label, entry.title);
+					const target = sessionRowTarget(container, entry.id, entry.title);
 					if (target === null) { missed++; continue; }
 					if (existingMarker(target.row, ROW_DOT_ATTR, entry.id) !== null) { placed++; continue; }
 					const dot = document.createElement("span");
@@ -1031,26 +1135,62 @@ window.__ModuleLoader__.load({
 				pruneSeenState();
 				saveSeenState();
 			}, [list]);
-			const currentId = currentSessionId(list);
+			const currentIds = currentSessionIds(list);
 			const items = collectUnread(list, pending, config, seenState.seen);
 			const count = items.length;
 			// Being in a session is what marks it read — but only once you have STAYED
 			// `clearDelaySec` seconds (0 = the moment you enter, the original
-			// behaviour). The timer is torn down whenever you leave, or whenever that
+			// behaviour). A clock is torn down whenever you leave, or whenever that
 			// session becomes unread again from a fresh ending, so the clock restarts;
 			// that teardown IS the "continuous stay, leaving resets it" rule. A reload
-			// restarts it too, since the timer only lives in this page.
-			const currentUnread = items.some((item) => item.id === currentId);
-			const stayKey = currentUnread ? stayKeyFor(currentId, list) : "";
+			// restarts it too, since the timers only live in this page.
+			//
+			// One clock per session the main view shows: with two retained sessions,
+			// marking only the first left the session you were reading unread forever.
+			const unreadIds = new Set(items.map((item) => item.id));
+			const staySignature = currentIds
+				.filter((id) => unreadIds.has(id))
+				.map((id) => stayKeyFor(id, list))
+				.join("|");
 			const delayMs = config.clearDelaySec * 1000;
 			const [, bumpStay] = React.useState(0);
+			// The timer chain below is keyed on the signature, but every attempt reads
+			// the CURRENT list and marks; a ref is how the chain sees them.
+			const stayLive = React.useRef({ list });
+			stayLive.current = { list };
 			React.useEffect(() => {
-				if (stayKey === "") return undefined;
-				const markRead = () => { if (noteSeen(currentId)) { saveSeenState(); bumpStay((n) => n + 1); } };
-				if (delayMs <= 0) { markRead(); return undefined; }
-				const timer = window.setTimeout(markRead, delayMs);
-				return () => window.clearTimeout(timer);
-			}, [stayKey, currentId, delayMs]);
+				if (staySignature === "") return undefined;
+				const ids = staySignature.split("|").map((key) => key.slice(0, key.indexOf("\u0000")));
+				let cancelled = false;
+				let timer = 0;
+				const attempt = () => {
+					if (cancelled) return;
+					const byId = stayLive.current.list !== null && typeof stayLive.current.list === "object" && stayLive.current.list.byId !== null && typeof stayLive.current.list.byId === "object" ? stayLive.current.list.byId : {};
+					let changed = false;
+					let stillUnread = false;
+					for (const id of ids) {
+						const endAt = lastTurnEndAt(byId[id]);
+						if (endAt <= 0) continue;
+						const seenAt = seenState.seen[id];
+						if (typeof seenAt === "number" && endAt <= seenAt) continue;
+						stillUnread = true;
+						if (noteSeen(id, endAt)) changed = true;
+					}
+					if (changed) { saveSeenState(); bumpStay((n) => n + 1); }
+					// Watchdog. With the mark in the Host's own domain it should always
+					// land, so this normally stops after the first attempt; it exists for
+					// the case the mark DID land and the item is still unread (a fresh
+					// ending raced the timer), instead of leaving the dot red for good.
+					// A "waiting for you" item has no turn end to acknowledge: stop there.
+					timer = stillUnread ? window.setTimeout(attempt, 2000) : 0;
+				};
+				if (delayMs <= 0) attempt();
+				else timer = window.setTimeout(attempt, delayMs);
+				return () => {
+					cancelled = true;
+					if (timer !== 0) window.clearTimeout(timer);
+				};
+			}, [staySignature, delayMs]);
 			React.useEffect(() => { emitRealBadge(count, items); }, [count, items]);
 			// The workspace rows are labelled with the workspace TITLE, which is not
 			// always the cwd basename, so map session → title from the official snapshot.
@@ -1187,6 +1327,9 @@ window.__ModuleLoader__.load({
 			if (headerBadgeFailures < HEAD_BADGE_MAX_FAILURES || headerBadgeGivenUp) return;
 			headerBadgeGivenUp = true;
 			try { console.warn("dsh-icon-custom: 工作区标题红点连续失败,本次会话内已自动关闭。"); } catch {}
+			// Same posture as the row dots: give up by disappearing, never by freezing a
+			// number that has stopped following the rule.
+			clearHeaderBadge();
 		}
 
 		/**
@@ -1853,12 +1996,21 @@ window.__ModuleLoader__.load({
 				.then((resp) => { if (resp && resp.ok === true) syncStatus(resp.value); })
 				.catch(() => {});
 			rpc.call("/api", "iconCustom/getUnreadRule", { args: {} })
-				.then((resp) => { if (resp && resp.ok === true) emitUnreadConfig(resp.value); })
+				.then((resp) => {
+					if (resp === null || typeof resp !== "object" || resp.ok !== true) return;
+					// The rule response carries the Host's clock; it is what puts the seen
+					// watermark (and a legacy browser-domain store) into the Host's domain.
+					if (resp.value !== null && typeof resp.value === "object") noteHostClock(resp.value.hostNow);
+					emitUnreadConfig(resp.value);
+				})
 				.catch(() => {});
 			// Keep "the last moment this browser was here" fresh, so an ending that
 			// happens while the app is closed still counts as unread when you return.
 			ctx.effect(() => {
-				const touch = () => { seenState.lastActiveAt = Date.now(); saveSeenState(); };
+				// Host domain (see the seen store): "the last moment this browser was
+				// here" must be comparable with `turn/end.time`, not with the browser's
+				// own clock.
+				const touch = () => { seenState.lastActiveAt = hostNow(); saveSeenState(); };
 				const interval = window.setInterval(touch, 20000);
 				window.addEventListener("visibilitychange", touch);
 				window.addEventListener("beforeunload", touch);
@@ -1869,6 +2021,22 @@ window.__ModuleLoader__.load({
 					touch();
 				};
 			}, "dsh-icon-custom: unread watermark");
+			// Re-sample the Host↔browser clock offset after a sleep/resume, which is the
+			// one moment the two can drift apart mid-page. Throttled: it is one small
+			// RPC per visible-again, and never on beforeunload (nothing would come back).
+			ctx.effect(() => {
+				let sampledAt = 0;
+				const sample = () => {
+					if (document.visibilityState === "hidden") return;
+					if (Date.now() - sampledAt < 60000) return;
+					sampledAt = Date.now();
+					rpc.call("/api", "iconCustom/getUnreadRule", { args: {} })
+						.then((resp) => { if (resp && resp.ok === true && resp.value !== null && typeof resp.value === "object") noteHostClock(resp.value.hostNow); })
+						.catch(() => {});
+				};
+				window.addEventListener("visibilitychange", sample);
+				return () => window.removeEventListener("visibilitychange", sample);
+			}, "dsh-icon-custom: host clock sample");
 			// Brand-mark seat: replaces only the whale mark (verified: a
 			// third-party registration wins over the official occupant and the
 			// official package's mark steps aside). The brand NAME text is a
