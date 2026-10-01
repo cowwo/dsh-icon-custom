@@ -60,6 +60,14 @@ window.__ModuleLoader__.load({
 			unreadWaiting: "在等你",
 			unreadEnded: "刚结束,还没看",
 			unreadPanelOther: "其他",
+			unreadMarkAllRead: "全部标记已读",
+			/** 与官方侧栏同一形状("13小时"),方便和列表里的时间戳逐字对上。 */
+			ageNow: "刚刚",
+			ageMinutes: "{n}分钟",
+			ageHours: "{n}小时",
+			ageDays: "{n}天",
+			ageMonths: "{n}个月",
+			ageYears: "{n}年",
 			workspaceDotLabel: "在工作区和会话行上显示红点(实验)",
 			workspaceDotHint: "在侧栏工作区那一行的文件夹图标上点一个小红点。这一项是贴着页面结构做的,DSH 升级后可能失效;失效时只会变成\"不显示\",不会影响红点数字、清单、跳转这些功能,随时可以关掉它。",
 			badgeTestHint: "真实未读 = 有会话发生了上面勾选的情况、而且你还没看过它(打开该会话即视为已读)。你正开着的会话也算——窗口可能被最小化、页面可能切到后台,这里无从判断你在不在看,所以不做这个区分。只有子代理不计。手动模式:自己填数字试看效果。刷新页面后回到真实未读。",
@@ -118,6 +126,14 @@ window.__ModuleLoader__.load({
 			unreadWaiting: "waiting for you",
 			unreadEnded: "ended, not seen yet",
 			unreadPanelOther: "Other",
+			unreadMarkAllRead: "Mark all read",
+			/** Same shape as the shipped sidebar ("13h"), so the two can be read side by side. */
+			ageNow: "now",
+			ageMinutes: "{n}min",
+			ageHours: "{n}h",
+			ageDays: "{n}d",
+			ageMonths: "{n}mo",
+			ageYears: "{n}y",
 			workspaceDotLabel: "Dots on workspace and session rows (experimental)",
 			workspaceDotHint: "Adds a small red dot to the folder icon of each workspace row. This one reads the page structure, so a DSH upgrade may break it; when it does it simply stops showing, never affecting the counts, the list, or navigation. Turn it off any time.",
 			badgeTestHint: "Real unread = a session ended for one of the checked reasons and you have not looked at it yet (opening a session marks it read). The session you are viewing counts too — the window may be minimised or the page in the background, so this half cannot tell whether you are looking, and does not pretend to. Only sub-agents never count. Manual = type a number to preview. Resets to Real on reload.",
@@ -792,6 +808,19 @@ window.__ModuleLoader__.load({
 			unreadPanelListeners.add(fn);
 			return () => { unreadPanelListeners.delete(fn); };
 		}
+		/**
+		 * Tells the badge source that the marks moved somewhere it did not touch —
+		 * the panel's "mark all read". It must re-render to re-emit the number (which
+		 * also repaints the row dots and rebuilds the tab badge).
+		 */
+		const unreadPokeListeners = new Set();
+		function emitUnreadPoke() {
+			unreadPokeListeners.forEach((fn) => { try { fn(); } catch {} });
+		}
+		function subscribeUnreadPoke(fn) {
+			unreadPokeListeners.add(fn);
+			return () => { unreadPokeListeners.delete(fn); };
+		}
 		function toggleUnreadPanel(anchor) {
 			emitUnreadPanel(!unreadPanelOpen, anchor === undefined ? null : anchor);
 		}
@@ -840,6 +869,97 @@ window.__ModuleLoader__.load({
 				group.items.push(item);
 			}
 			return groups;
+		}
+		/**
+		 * Age buckets, in the shipped sidebar's own units.
+		 *
+		 * Same thresholds as the official `relativeTime`: under a minute "now", then
+		 * minutes / hours / days / months / years. Deliberately copied instead of
+		 * imported — a display plugin must not depend on a Harness Client package —
+		 * but the SHAPE has to match the sidebar's, because the whole point of
+		 * showing it here is that a reader can line the panel's "13小时" up with the
+		 * timestamp on the row itself.
+		 * @param at - host-domain epoch milliseconds.
+		 * @param now - host-domain now.
+		 * @returns `{ unit, n }`, `unit` in `now|minutes|hours|days|months|years`.
+		 */
+		function relativeAgeParts(at, now) {
+			const MINUTE = 60000, HOUR = 3600000, DAY = 86400000;
+			const diff = Math.max(0, now - at);
+			if (diff < MINUTE) return { unit: "now", n: 0 };
+			if (diff < HOUR) return { unit: "minutes", n: Math.floor(diff / MINUTE) };
+			if (diff < DAY) return { unit: "hours", n: Math.floor(diff / HOUR) };
+			if (diff < 30 * DAY) return { unit: "days", n: Math.floor(diff / DAY) };
+			if (diff < 365 * DAY) return { unit: "months", n: Math.floor(diff / (30 * DAY)) };
+			return { unit: "years", n: Math.floor(diff / (365 * DAY)) };
+		}
+		/**
+		 * One ending's age as text ("13小时" / "13h"), or "" when there is no time.
+		 * @param at - host-domain epoch milliseconds, 0/absent for "unknown".
+		 * @param now - host-domain now.
+		 * @param t - locale binder.
+		 * @returns the label.
+		 */
+		function unreadAgeLabel(at, now, t) {
+			if (typeof at !== "number" || !Number.isFinite(at) || at <= 0) return "";
+			const { unit, n } = relativeAgeParts(at, now);
+			// Same shape as the shipped sidebar's own label: the "now" bucket carries
+			// no number.
+			return unit === "now" ? t("ageNow") : t(`age${unit[0].toUpperCase()}${unit.slice(1)}`, { n });
+		}
+		/**
+		 * A short, unambiguous handle for a session: the first 8 characters of its id.
+		 *
+		 * Two sessions can share a title — that is precisely what made one red dot look
+		 * unclearable, because the row could not be told apart from its namesake — and
+		 * this is what distinguishes them when the titles do not.
+		 * @param id - the session id.
+		 * @returns the short form, or "".
+		 */
+		function shortSessionId(id) {
+			if (typeof id !== "string" || id === "") return "";
+			const bare = id.startsWith("session-") ? id.slice("session-".length) : id;
+			return bare.slice(0, 8);
+		}
+		/**
+		 * The dim second line of one panel row: why it is listed, how long ago that
+		 * was, and which session it is.
+		 * @param item - a row from `collectUnread`.
+		 * @param now - host-domain now.
+		 * @param t - locale binder.
+		 * @returns the line, already joined.
+		 */
+		function unreadRowSubtitle(item, now, t) {
+			const parts = [item.waiting === true ? t("unreadWaiting") : t("unreadEnded")];
+			// A "waiting" row's `at` is Date.now() (it has no ending of its own), so only
+			// turn-end rows carry a readable age.
+			if (item.waiting !== true) {
+				const age = unreadAgeLabel(item.at, now, t);
+				if (age !== "") parts.push(age);
+			}
+			const short = shortSessionId(item.id);
+			if (short !== "") parts.push(short);
+			return parts.join(" · ");
+		}
+		/**
+		 * What "mark all read" may actually acknowledge: the turn-end rows.
+		 *
+		 * A "waiting for you" row is not watermark-based at all — it is listed while
+		 * that interaction is live, and no mark can clear it — so the caller must
+		 * leave it alone.
+		 * @param items - rows from `collectUnread`.
+		 * @returns `[{ id, seenAt }]`, each carrying the `endAt` it acknowledges.
+		 */
+		function unreadAckTargets(items) {
+			const targets = [];
+			for (const item of Array.isArray(items) ? items : []) {
+				if (item === null || typeof item !== "object") continue;
+				if (item.waiting === true) continue;
+				if (typeof item.id !== "string" || item.id === "") continue;
+				if (typeof item.at !== "number" || !Number.isFinite(item.at) || item.at <= 0) continue;
+				targets.push({ id: item.id, seenAt: item.at });
+			}
+			return targets;
 		}
 		//#endregion
 
@@ -1154,6 +1274,11 @@ window.__ModuleLoader__.load({
 				.join("|");
 			const delayMs = config.clearDelaySec * 1000;
 			const [, bumpStay] = React.useState(0);
+			// The panel can move the marks without going through this component
+			// ("mark all read"); re-render so the number, the row dots and the tab
+			// badge all follow immediately.
+			const [, bumpPoke] = React.useState(0);
+			React.useEffect(() => subscribeUnreadPoke(() => bumpPoke((n) => n + 1)), []);
 			// The timer chain below is keyed on the signature, but every attempt reads
 			// the CURRENT list and marks; a ref is how the chain sees them.
 			const stayLive = React.useRef({ list });
@@ -1482,8 +1607,16 @@ window.__ModuleLoader__.load({
 		function UnreadPopup(props) {
 			const [snapshot, setSnapshot] = React.useState(badgeSnapshot);
 			const [open, setOpen] = React.useState(unreadPanelOpen);
+			// Ages are computed against the HOST's clock (the endings are host
+			// timestamps); re-tick while open so "刚刚" does not stay stale.
+			const [, tick] = React.useState(0);
 			React.useEffect(() => subscribeBadge(setSnapshot), []);
 			React.useEffect(() => subscribeUnreadPanel(() => setOpen(unreadPanelOpen)), []);
+			React.useEffect(() => {
+				if (!open) return undefined;
+				const interval = window.setInterval(() => tick((n) => n + 1), 30000);
+				return () => window.clearInterval(interval);
+			}, [open]);
 			React.useEffect(() => {
 				if (!open) return undefined;
 				const onKey = (event) => { if (event.key === "Escape") emitUnreadPanel(false); };
@@ -1517,6 +1650,22 @@ window.__ModuleLoader__.load({
 				boxShadow: "0 10px 30px rgba(0,0,0,.18)", color: "var(--dsw-alias-label-primary)", fontSize: "12px"
 			};
 			const items = Array.isArray(snapshot.items) ? snapshot.items : [];
+			const ackTargets = unreadAckTargets(items);
+			/**
+			 * Acknowledge every turn-end row at once.
+			 *
+			 * "Waiting for you" rows cannot be acknowledged (they are not watermark
+			 * based), so the panel stays open while any of them remain — closing it
+			 * would hide the one thing that still needs the reader.
+			 */
+			const markAllRead = () => {
+				let changed = false;
+				for (const target of ackTargets) if (noteSeen(target.id, target.seenAt)) changed = true;
+				if (!changed) return;
+				saveSeenState();
+				emitUnreadPoke();
+				if (ackTargets.length === items.length) emitUnreadPanel(false);
+			};
 			return React.createElement("div", { "data-icon-custom-unread": "1", style },
 				React.createElement("div", { style: { fontWeight: 600, padding: "2px 6px 8px" } }, t("unreadPanelTitle")),
 				items.length === 0
@@ -1532,10 +1681,17 @@ window.__ModuleLoader__.load({
 								style: { display: "block", width: "100%", textAlign: "left", padding: "6px 8px", border: "0", borderRadius: "8px", background: "transparent", color: "inherit", font: "inherit", cursor: "pointer" }
 							},
 								React.createElement("span", { style: { display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, item.title),
-								React.createElement("span", { style: { display: "block", opacity: 0.6, fontSize: "11px" } }, item.waiting === true ? t("unreadWaiting") : t("unreadEnded"))
+								React.createElement("span", { style: { display: "block", opacity: 0.6, fontSize: "11px" } }, unreadRowSubtitle(item, hostNow(), t))
 							))
 						))
-					)
+					),
+				ackTargets.length > 0 && React.createElement("div", { style: { marginTop: "6px", paddingTop: "6px", borderTop: "1px solid var(--dsw-alias-border-l2)" } },
+					React.createElement("button", {
+						type: "button",
+						onClick: markAllRead,
+						style: { display: "block", width: "100%", padding: "5px 8px", border: "0", borderRadius: "8px", background: "transparent", color: "inherit", font: "inherit", cursor: "pointer", opacity: 0.85 }
+					}, t("unreadMarkAllRead"))
+				)
 			);
 		}
 
