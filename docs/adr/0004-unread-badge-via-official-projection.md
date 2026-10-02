@@ -2,7 +2,7 @@
 
 ## Status
 
-accepted
+accepted(其中「停留计时」一条由 [ADR 0006](./0006-entry-bounded-stay-clock.md) 修订:计时改由「进入会话」上弦,不追认停留期间的新结束)
 
 ## Context
 

@@ -70,10 +70,17 @@ window.__ModuleLoader__.load({
 			ageYears: "{n}年",
 			workspaceDotLabel: "在工作区和会话行上显示红点(实验)",
 			workspaceDotHint: "在侧栏工作区那一行的文件夹图标上点一个小红点。这一项是贴着页面结构做的,DSH 升级后可能失效;失效时只会变成\"不显示\",不会影响红点数字、清单、跳转这些功能,随时可以关掉它。",
+			appBadgeLabel: "在系统应用图标上显示红点",
+			appBadgeHint: "安装为应用后,把同一个数字也放到系统图标上:Windows 是任务栏图标上的角标,macOS 是 Dock 角标,iOS 是主屏图标上的数字。样子由系统决定——Windows 上 Chrome 画深色圆+白字,Edge 走 Windows 系统徽章通道(是否显示数字由 Edge/Windows 决定);插件会周期重设数字,但只在应用窗口开着时更新。",
+			appBadgeFootnote: "角标只在应用窗口开着时由本插件更新;数字超过 99 时由系统显示为 99+。",
+			appBadgeProbeInstalled: "当前环境:已安装为应用,本机可以设置角标。是否真正显示由系统决定。",
+			appBadgeProbeTab: "当前环境:浏览器标签页(不是安装的应用)——安装为应用后才会显示角标。",
+			appBadgeProbeUnsupported: "当前环境:本机没有这个能力(当前浏览器不支持应用角标)。",
+			appBadgeProbeInsecure: "当前环境:不是安全上下文(请用 localhost 或 https 访问),系统角标不可用。",
 			badgeTestHint: "真实未读 = 有会话发生了上面勾选的情况、而且你还没看过它(打开该会话即视为已读)。你正开着的会话也算——窗口可能被最小化、页面可能切到后台,这里无从判断你在不在看,所以不做这个区分。只有子代理不计。手动模式:自己填数字试看效果。刷新页面后回到真实未读。",
 			clearDelayLabel: "进入会话后多久算已读:",
 			clearDelayUnit: "秒",
-			clearDelayHint: "填 0 = 进去就算已读(红点立即消失)。大于 0 时,你要在那个会话里连续待满这么多秒它才算看过:中途切走、或它又跑完一轮,都会清零重数;刷新页面也重新数。上限 600 秒。"
+			clearDelayHint: "填 0 = 进去就算已读(红点立即消失)。大于 0 时,你要在那个会话里连续待满这么多秒它才算看过:中途切走会清零重数,刷新页面也重新数。**计时只认\"你进入会话时已经存在的结束\"**——你人已经在里面的时候又跑完一轮,那一轮不算数:它会一直亮着,等你切走再进来才会清。上限 600 秒。"
 		};
 		const en = {
 			nav: "Favicon",
@@ -136,10 +143,17 @@ window.__ModuleLoader__.load({
 			ageYears: "{n}y",
 			workspaceDotLabel: "Dots on workspace and session rows (experimental)",
 			workspaceDotHint: "Adds a small red dot to the folder icon of each workspace row. This one reads the page structure, so a DSH upgrade may break it; when it does it simply stops showing, never affecting the counts, the list, or navigation. Turn it off any time.",
+			appBadgeLabel: "Badge the system app icon",
+			appBadgeHint: "Once installed as an app, the same number also goes to the system icon: a taskbar badge on Windows, a Dock badge on macOS, a number on the iOS home-screen icon. The system decides how it looks — on Windows, Chrome draws a dark circle with white text, while Edge goes through the Windows badge channel (whether it shows the number is up to Edge/Windows). The plugin re-asserts the number periodically, but only while the app window is open.",
+			appBadgeFootnote: "The badge is only updated by this plugin while the app window is open; above 99 the system shows 99+.",
+			appBadgeProbeInstalled: "This environment: installed as an app, so this device can set a badge. Whether it actually appears is up to the system.",
+			appBadgeProbeTab: "This environment: a browser tab (not an installed app) — install as an app to get a badge.",
+			appBadgeProbeUnsupported: "This environment: no app-badge capability in this browser.",
+			appBadgeProbeInsecure: "This environment: not a secure context (use localhost or https) — the system badge is unavailable.",
 			badgeTestHint: "Real unread = a session ended for one of the checked reasons and you have not looked at it yet (opening a session marks it read). The session you are viewing counts too — the window may be minimised or the page in the background, so this half cannot tell whether you are looking, and does not pretend to. Only sub-agents never count. Manual = type a number to preview. Resets to Real on reload.",
 			clearDelayLabel: "Mark read after staying:",
 			clearDelayUnit: "seconds",
-			clearDelayHint: "0 = read as soon as you enter (the dot clears at once). Above 0 you must stay in that session for this many seconds before it counts as read: leaving it, or a fresh ending in it, resets the clock, and so does a reload. Capped at 600 seconds."
+			clearDelayHint: "0 = read as soon as you enter (the dot clears at once). Above 0 you must stay in that session for this many seconds before it counts as read: leaving it resets the clock, and so does a reload. The clock only ever covers **the ending that was already there when you entered** — a turn that finishes while you are sitting in the session does not count: it stays red until you leave and come back. Capped at 600 seconds."
 		};
 		//#endregion
 
@@ -255,7 +269,9 @@ window.__ModuleLoader__.load({
 		const UNREAD_FALLBACK_REASONS = { completed: true, error: true, blocked: true, "max-tokens": true, interrupted: true, "aborted:user": false, "aborted:other": true };
 		/** Mirror of the host's cap (see lib/unread.js) — 10 minutes. */
 		const UNREAD_CLEAR_DELAY_MAX_SEC = 600;
-		let unreadConfig = { reasons: { ...UNREAD_FALLBACK_REASONS }, pending: true, workspaceDot: true, clearDelaySec: 0 };
+		/** Mirror of the host's default (see lib/unread.js) — badging the app icon is on. */
+		const UNREAD_APP_BADGE_FALLBACK = true;
+		let unreadConfig = { reasons: { ...UNREAD_FALLBACK_REASONS }, pending: true, workspaceDot: true, appBadge: UNREAD_APP_BADGE_FALLBACK, clearDelaySec: 0 };
 		const unreadConfigListeners = new Set();
 		/** Mirror of the host's normalizer: any input becomes an integer 0..cap seconds. */
 		function normalizeClearDelay(input) {
@@ -276,12 +292,16 @@ window.__ModuleLoader__.load({
 				reasons,
 				pending: typeof source.pending === "boolean" ? source.pending : true,
 				workspaceDot: typeof source.workspaceDot === "boolean" ? source.workspaceDot : true,
+				appBadge: typeof source.appBadge === "boolean" ? source.appBadge : UNREAD_APP_BADGE_FALLBACK,
 				clearDelaySec: normalizeClearDelay(source.clearDelaySec)
 			};
 		}
 		function emitUnreadConfig(input) {
 			unreadConfig = normalizeUnreadConfig(input);
 			unreadConfigListeners.forEach((fn) => { try { fn(unreadConfig); } catch {} });
+			// The rule (or just the app-badge switch) moved: the OS badge follows it
+			// in the same breath, so toggling it applies without a reload.
+			reconcileAppBadge();
 		}
 		function subscribeUnreadConfig(fn) {
 			unreadConfigListeners.add(fn);
@@ -432,25 +452,6 @@ window.__ModuleLoader__.load({
 			return value !== null && typeof value === "object" && typeof value.endAt === "number" ? value.endAt : 0;
 		}
 		/**
-		 * What the "stay here long enough" timer is armed for, or "" when nothing
-		 * should be armed.
-		 *
-		 * Keyed on the session's own `lastTurnEnd.endAt`, deliberately NOT on the
-		 * collected item's `at`: a "waiting for you" item carries `at: Date.now()`,
-		 * which changes on every evaluation — keying on that would tear the timer
-		 * down and re-arm it forever, and a waiting session could never be marked
-		 * read. Including `endAt` is also what makes a NEW ending restart the clock
-		 * instead of inheriting the previous one's progress.
-		 * @param sessionId - the session being viewed.
-		 * @param list - the session list snapshot.
-		 * @returns the key, or "" when there is no session to arm for.
-		 */
-		function stayKeyFor(sessionId, list) {
-			if (typeof sessionId !== "string" || sessionId === "") return "";
-			const byId = list !== null && typeof list === "object" && list.byId !== null && typeof list.byId === "object" ? list.byId : {};
-			return `${sessionId}\u0000${lastTurnEndAt(byId[sessionId])}`;
-		}
-		/**
 		 * How many sessions deserve the badge right now: endings whose reason is
 		 * enabled and that this browser has not seen since, plus sessions waiting
 		 * for you (when that source is enabled). Only sub-agent sessions never count.
@@ -557,6 +558,8 @@ window.__ModuleLoader__.load({
 			// The header badge is a DOM node, not a listener, so it is reconciled
 			// here as well as from the mutation watchdog. Idempotent either way.
 			paintHeaderBadge();
+			// Same number, second consumer: the OS badge behind the app icon.
+			reconcileAppBadge();
 		}
 		/** Manual test input. */
 		function emitBadge(value) {
@@ -586,6 +589,180 @@ window.__ModuleLoader__.load({
 		}
 		function badgeLabel(count) {
 			return count > 99 ? "99+" : String(count);
+		}
+
+		//#endregion
+		//#region app badge (OS app icon)
+		// The badge the OPERATING SYSTEM draws on the icon of the installed app: the
+		// taskbar overlay on Windows, the Dock badge on macOS, the number on an iOS
+		// home-screen icon. It is the same number the page badge shows, projected
+		// onto the system icon — one number, two consumers.
+		//
+		// Three facts shape this region (all checked against primary sources; see
+		// docs/adr/0005-app-icon-badge.md):
+		//   * detecting the API is NOT delivery. Chromium on Android exposes
+		//     `setAppBadge` and silently ignores it, and iOS only draws the badge
+		//     once notifications have been granted. So the probe reports LOCAL facts
+		//     and never promises that a badge will appear;
+		//   * the OS owns the rendering. On Windows the badge is a browser-drawn
+		//     overlay on the taskbar button of an OPEN window: closing the window
+		//     drops it, and nothing can refresh it afterwards (no push server);
+		//   * the API is write-only, so this half keeps its own count — the very
+		//     `effectiveCount()` the favicon and the header badge already use.
+		//
+		// Everything that DECIDES is a pure function, so a test drives it with no
+		// browser at all; exactly one function touches the API.
+		/** Display modes that mean "this window IS the installed app", not a tab. */
+		const APP_DISPLAY_MODES = ["standalone", "fullscreen", "minimal-ui", "window-controls-overlay"];
+
+		/**
+		 * Normalize what this device is, as three independent local facts.
+		 *
+		 * Deliberately NOT "does this platform support it": the method that works
+		 * on Windows resolves and does nothing on Android, and Apple draws the
+		 * badge only after notifications are granted. Neither is answerable from
+		 * inside the page, so the probe stays silent about them and the copy says
+		 * "whether it actually appears is up to the system" instead.
+		 * @param env - `{ secure, hasApi, installed }`; anything non-boolean reads false.
+		 * @returns the same three flags, normalized.
+		 */
+		function badgeCapabilityProbe(env) {
+			const source = env !== null && typeof env === "object" ? env : {};
+			return {
+				secure: source.secure === true,
+				hasApi: source.hasApi === true,
+				installed: source.installed === true
+			};
+		}
+
+		/**
+		 * Read those facts off the window this code runs in.
+		 *
+		 * "Installed" is a display-mode match rather than `standalone` alone: the
+		 * platform manifest asks for `fullscreen`, so an installed window matches
+		 * THAT mode, and a standalone-only test would report "browser tab" forever.
+		 * @returns the probe for this device.
+		 */
+		function appBadgeEnv() {
+			const nav = typeof navigator === "object" && navigator !== null ? navigator : {};
+			let installed = nav.standalone === true;
+			if (!installed && typeof window !== "undefined" && typeof window.matchMedia === "function") {
+				for (const mode of APP_DISPLAY_MODES) {
+					try {
+						if (window.matchMedia(`(display-mode: ${mode})`).matches === true) { installed = true; break; }
+					} catch {}
+				}
+			}
+			return badgeCapabilityProbe({
+				secure: typeof window !== "undefined" && window.isSecureContext === true,
+				hasApi: typeof nav.setAppBadge === "function" && typeof nav.clearAppBadge === "function",
+				installed
+			});
+		}
+
+		/**
+		 * What the OS badge should say for a given count.
+		 *
+		 * The number is handed over AS IS (no `99+` clamping here): the system
+		 * saturates it in its own way, and duplicating that rule is how the two
+		 * projections start disagreeing. Switching the feature off clears the
+		 * badge rather than abandoning it — a number left behind after "off"
+		 * reads as a bug.
+		 * @param count - the unread count, i.e. the number the page badge shows.
+		 * @param enabled - the `appBadge` setting; only `true` enables it.
+		 * @returns `{ kind: "set", value }` or `{ kind: "clear" }`.
+		 */
+		function appBadgeEffect(count, enabled) {
+			const value = enabled === true ? normalizeCount(count) : 0;
+			return value > 0 ? { kind: "set", value } : { kind: "clear" };
+		}
+
+		/**
+		 * Which self-check line the settings page shows for this device.
+		 *
+		 * A missing probe is NOT reported as "insecure": that message tells the
+		 * user to change how they reach the page, which would be chasing the
+		 * wrong thing. Only a real reading may claim that.
+		 * @param probe - a `badgeCapabilityProbe` result.
+		 * @returns a locale key.
+		 */
+		function appBadgeCapabilityKey(probe) {
+			if (probe === null || typeof probe !== "object") return "appBadgeProbeUnsupported";
+			const facts = badgeCapabilityProbe(probe);
+			if (facts.secure !== true) return "appBadgeProbeInsecure";
+			if (facts.hasApi !== true) return "appBadgeProbeUnsupported";
+			return facts.installed === true ? "appBadgeProbeInstalled" : "appBadgeProbeTab";
+		}
+
+		/** The last effect actually handed to the API, so a repeat is a no-op. */
+		let lastAppBadgeId = null;
+
+		/**
+		 * The ONE place that talks to the Badging API.
+		 *
+		 * Idempotence is required here, not polish: `notifyBadge` fires on every
+		 * badge change AND again from the DOM watchdog that re-asserts the tab
+		 * badge, and each call costs an IPC to the browser process plus a taskbar
+		 * repaint. Only a real change in the projected effect reaches the API.
+		 * @param effect - an `appBadgeEffect` result.
+		 * @param force - re-send even when the effect is unchanged. Used only by
+		 *   the low-frequency OS-badge watchdog, because Windows/Edge can replace a
+		 *   numeric badge with a notification dot after our call succeeded.
+		 */
+		function applyAppBadge(effect, force) {
+			const intent = effect !== null && typeof effect === "object" ? effect : {};
+			// Anything that is not a positive number is a clear, so a bogus effect
+			// can never hand the system a `setAppBadge(0)`.
+			const id = intent.kind === "set" && typeof intent.value === "number" && intent.value > 0 ? `set:${intent.value}` : "clear";
+			if (id === lastAppBadgeId && force !== true) return;
+			const nav = typeof navigator === "object" && navigator !== null ? navigator : null;
+			if (nav === null || typeof nav.setAppBadge !== "function" || typeof nav.clearAppBadge !== "function") return;
+			lastAppBadgeId = id;
+			try {
+				// Always a number, never the argument-less "flag" form: on WebKit a
+				// no-argument call can REMOVE a badge that is already showing.
+				const settled = id === "clear" ? nav.clearAppBadge() : nav.setAppBadge(intent.value);
+				if (settled !== null && typeof settled === "object" && typeof settled.catch === "function") {
+					settled.catch(() => {
+						// The API rejected: the browser did NOT apply this effect, so
+						// forget it and let the next reconcile/retry try again. Guard
+						// against a newer call having replaced the remembered effect.
+						if (lastAppBadgeId === id) lastAppBadgeId = null;
+					});
+				}
+			} catch {
+				// A synchronous throw means nothing was applied, so the next
+				// reconcile retries instead of remembering a phantom success.
+				lastAppBadgeId = null;
+			}
+		}
+
+		/**
+		 * Reconcile the OS badge with the page badge.
+		 *
+		 * Both inputs are the page's own: the number the favicon and the header
+		 * badge already show, and the rule the host persists. Called from
+		 * `emitUnreadConfig` (rule arrived / switch moved) and `notifyBadge`
+		 * (number moved) — together those cover every way the badge can change.
+		 * @param force - re-send even if the projected effect is unchanged.
+		 */
+		function reconcileAppBadge(force) {
+			applyAppBadge(appBadgeEffect(effectiveCount(), unreadConfig.appBadge === true), force === true);
+		}
+
+		/**
+		 * Keep a positive numeric badge asserted while the app window is alive.
+		 *
+		 * Windows/Edge can render a notification glyph (a dot) over the numeric
+		 * badge after we set it; unlike the favicon, the OS badge then has no
+		 * watcher to put the number back. Re-send only when the plugin's own
+		 * projection says there SHOULD be a number, and never when it says clear —
+		 * so a count of 0 is not repeatedly cleared and no phantom badge appears.
+		 */
+		function reassertAppBadge() {
+			if (unreadConfig.appBadge !== true) return;
+			if (normalizeCount(effectiveCount()) <= 0) return;
+			reconcileAppBadge(true);
 		}
 
 		//#endregion
@@ -1258,20 +1435,26 @@ window.__ModuleLoader__.load({
 			const currentIds = currentSessionIds(list);
 			const items = collectUnread(list, pending, config, seenState.seen);
 			const count = items.length;
-			// Being in a session is what marks it read — but only once you have STAYED
-			// `clearDelaySec` seconds (0 = the moment you enter, the original
-			// behaviour). A clock is torn down whenever you leave, or whenever that
-			// session becomes unread again from a fresh ending, so the clock restarts;
-			// that teardown IS the "continuous stay, leaving resets it" rule. A reload
-			// restarts it too, since the timers only live in this page.
+			// Being in a session is what marks it read — and the clock that does it is
+			// armed by ENTERING the session, never by a new ending.
+			//
+			// `clearDelaySec` still means "stay this long before the ending counts as
+			// seen" (0 = the moment you enter). What is new in 0.11.1 is WHEN the clock
+			// takes its snapshot: the moment the session joins the view. An ending that
+			// lands while you are already sitting there is therefore none of this
+			// clock's business — it stays unread until you leave and come back. The
+			// previous version re-armed on every new ending and chased the newest one,
+			// so a turn that finished while you watched was auto-read `clearDelaySec`
+			// seconds later: the dot for the session in front of you was a flash
+			// nobody could catch. See docs/adr/0006-entry-bounded-stay-clock.md.
+			//
+			// Leaving tears the clock down, which is what makes the stay "continuous".
+			// A reload restarts it too, since the timers only live in this page.
 			//
 			// One clock per session the main view shows: with two retained sessions,
 			// marking only the first left the session you were reading unread forever.
-			const unreadIds = new Set(items.map((item) => item.id));
-			const staySignature = currentIds
-				.filter((id) => unreadIds.has(id))
-				.map((id) => stayKeyFor(id, list))
-				.join("|");
+			const stayIds = currentIds.slice().sort();
+			const staySignature = stayIds.join("|");
 			const delayMs = config.clearDelaySec * 1000;
 			const [, bumpStay] = React.useState(0);
 			// The panel can move the marks without going through this component
@@ -1279,35 +1462,40 @@ window.__ModuleLoader__.load({
 			// badge all follow immediately.
 			const [, bumpPoke] = React.useState(0);
 			React.useEffect(() => subscribeUnreadPoke(() => bumpPoke((n) => n + 1)), []);
-			// The timer chain below is keyed on the signature, but every attempt reads
-			// the CURRENT list and marks; a ref is how the chain sees them.
+			// The effect below is keyed on the signature, but the snapshot it marks is
+			// taken from the CURRENT list; a ref is how it sees that list.
 			const stayLive = React.useRef({ list });
 			stayLive.current = { list };
+			/**
+			 * Entered-at snapshot: `id → endAt` as it stood when that session joined
+			 * the view. Deliberately NOT refreshed while the session stays — that is
+			 * the rule ("an ending during your stay waits for the next entry"). A
+			 * session that leaves is forgotten, so coming back takes a fresh snapshot.
+			 */
+			const stayArmed = React.useRef(new Map());
 			React.useEffect(() => {
+				const snapshot = stayLive.current.list !== null && typeof stayLive.current.list === "object" && stayLive.current.list.byId !== null && typeof stayLive.current.list.byId === "object" ? stayLive.current.list.byId : {};
+				const live = new Set(stayIds);
+				for (const id of Array.from(stayArmed.current.keys())) {
+					if (!live.has(id)) stayArmed.current.delete(id);
+				}
+				for (const id of stayIds) {
+					if (!stayArmed.current.has(id)) stayArmed.current.set(id, lastTurnEndAt(snapshot[id]));
+				}
 				if (staySignature === "") return undefined;
-				const ids = staySignature.split("|").map((key) => key.slice(0, key.indexOf("\u0000")));
+				const armed = stayIds.map((id) => ({ id, endAt: stayArmed.current.get(id) }));
 				let cancelled = false;
 				let timer = 0;
+				// Single-shot on purpose: the snapshot is fixed, so there is nothing to
+				// chase. A newer ending found here belongs to the NEXT entry.
 				const attempt = () => {
 					if (cancelled) return;
-					const byId = stayLive.current.list !== null && typeof stayLive.current.list === "object" && stayLive.current.list.byId !== null && typeof stayLive.current.list.byId === "object" ? stayLive.current.list.byId : {};
 					let changed = false;
-					let stillUnread = false;
-					for (const id of ids) {
-						const endAt = lastTurnEndAt(byId[id]);
-						if (endAt <= 0) continue;
-						const seenAt = seenState.seen[id];
-						if (typeof seenAt === "number" && endAt <= seenAt) continue;
-						stillUnread = true;
-						if (noteSeen(id, endAt)) changed = true;
+					for (const target of armed) {
+						if (typeof target.endAt !== "number" || target.endAt <= 0) continue;
+						if (noteSeen(target.id, target.endAt)) changed = true;
 					}
 					if (changed) { saveSeenState(); bumpStay((n) => n + 1); }
-					// Watchdog. With the mark in the Host's own domain it should always
-					// land, so this normally stops after the first attempt; it exists for
-					// the case the mark DID land and the item is still unread (a fresh
-					// ending raced the timer), instead of leaving the dot red for good.
-					// A "waiting for you" item has no turn end to acknowledge: stop there.
-					timer = stillUnread ? window.setTimeout(attempt, 2000) : 0;
 				};
 				if (delayMs <= 0) attempt();
 				else timer = window.setTimeout(attempt, delayMs);
@@ -1776,6 +1964,9 @@ window.__ModuleLoader__.load({
 			const [badgeSourceValue, setBadgeSourceValue] = React.useState(badgeSource);
 			const [unread, setUnread] = React.useState(unreadConfig);
 			React.useEffect(() => subscribeUnreadConfig(setUnread), []);
+			// Sampled when the section mounts, which is the moment the user is
+			// looking at it. It reports local facts only (see badgeCapabilityProbe).
+			const [appBadgeProbe] = React.useState(() => appBadgeEnv());
 			// Draft text for the delay box: typing must not save on every keystroke,
 			// and the box has to show the CLAMPED value once the save lands (type
 			// 99999 and it settles on the 600 cap instead of lying about it).
@@ -1846,7 +2037,7 @@ window.__ModuleLoader__.load({
 				const next = normalizeUnreadConfig({ ...unreadConfig, ...patch });
 				emitUnreadConfig(next);
 				rpc.call("/api", "iconCustom/setUnreadRule", {
-					args: { request: { reasons: next.reasons, pending: next.pending, workspaceDot: next.workspaceDot, clearDelaySec: next.clearDelaySec } }
+					args: { request: { reasons: next.reasons, pending: next.pending, workspaceDot: next.workspaceDot, appBadge: next.appBadge, clearDelaySec: next.clearDelaySec } }
 				}).catch(() => {});
 			}, [rpc]);
 			// Toggle one unread reason. Applies locally at once; the host keeps the
@@ -1860,6 +2051,11 @@ window.__ModuleLoader__.load({
 			// The fuse for the one fragile piece (see the workspace-dots region).
 			const onWorkspaceDotToggle = React.useCallback((checked) => {
 				saveUnreadRule({ workspaceDot: checked });
+			}, [saveUnreadRule]);
+			// The system-icon projection of the same number. Saved through the same
+			// one save path, so this field can never be dropped by a caller.
+			const onAppBadgeToggle = React.useCallback((checked) => {
+				saveUnreadRule({ appBadge: checked });
 			}, [saveUnreadRule]);
 			// Seconds you must stay in a session before it counts as read; 0 = as soon
 			// as you enter. Clamped by the shared normalizer, so a stray keystroke can
@@ -2129,6 +2325,20 @@ window.__ModuleLoader__.load({
 						),
 						React.createElement("div", { style: style.hint }, t("workspaceDotHint"))
 					),
+					React.createElement("div", { style: { marginTop: "10px" } },
+						React.createElement("label", { style: { display: "inline-flex", alignItems: "center", gap: "6px", fontSize: 12, color: "var(--dsw-alias-label-primary)", cursor: "pointer" } },
+							React.createElement("input", {
+								type: "checkbox",
+								checked: unread.appBadge !== false,
+								onChange: (event) => onAppBadgeToggle(event.target.checked === true)
+							}),
+							React.createElement("span", null, t("appBadgeLabel"))
+						),
+						React.createElement("div", { style: style.hint }, t("appBadgeHint")),
+						// What THIS device is — never a claim about the platform.
+						React.createElement("div", { style: style.hint }, t(appBadgeCapabilityKey(appBadgeProbe))),
+						React.createElement("div", { style: style.hint }, t("appBadgeFootnote"))
+					),
 					React.createElement("div", { style: style.hint }, t("badgeTestHint"))
 				),
 				notice ? React.createElement("div", { style: style.notice }, notice) : null,
@@ -2271,7 +2481,10 @@ window.__ModuleLoader__.load({
 				observer.observe(document.head, { childList: true, subtree: true, attributes: true, attributeFilter: ["href", "rel"] });
 				window.addEventListener("visibilitychange", schedule);
 				window.addEventListener("focus", schedule);
-				const interval = window.setInterval(reconcileFavicon, 5000);
+				const interval = window.setInterval(() => {
+					reconcileFavicon();
+					reassertAppBadge();
+				}, 5000);
 				return () => {
 					observer.disconnect();
 					window.removeEventListener("visibilitychange", schedule);

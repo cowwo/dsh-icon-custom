@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>待处理红点 · 定稿确认（工作区标题右上角）</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --page: #f4f5f6;
+    --fg: #1a1a1a;
+    --muted: #8a8f98;
+    --muted-strong: #6b727c;
+    --line: #e6e8eb;
+    --hover: #eef0f2;
+    --red: #e5484d;
+    --brand: #f5c518;
+    --shadow: 0 10px 30px rgba(0, 0, 0, .16);
+    --dot-ring: #ffffff;
+    --zero-bg: #b6bcc4;
+    --hit: rgba(229, 72, 77, .16);
+  }
+  html[data-theme="dark"] {
+    --bg: #1b1c1e;
+    --page: #131415;
+    --fg: #ecedee;
+    --muted: #8b9096;
+    --muted-strong: #a2a8b0;
+    --line: #33353a;
+    --hover: #2a2c30;
+    --shadow: 0 10px 30px rgba(0, 0, 0, .5);
+    --dot-ring: #1b1c1e;
+    --zero-bg: #4a4e55;
+    --hit: rgba(229, 72, 77, .26);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 28px 24px 64px;
+    background: var(--page); color: var(--fg);
+    font: 13px/1.5 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  header { max-width: 1180px; margin: 0 auto 22px; }
+  h1 { font-size: 17px; font-weight: 600; margin: 0 0 6px; letter-spacing: -.01em; }
+  header p { margin: 0 0 6px; color: var(--muted); max-width: 80ch; }
+  .pick { display: inline-flex; gap: 8px; align-items: center; margin-top: 8px; padding: 7px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+  .pick b { font-weight: 600; color: var(--fg); }
+  .bar { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg); }
+  .seg button { appearance: none; border: 0; background: transparent; color: var(--fg); font: inherit; padding: 5px 11px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+  .note { color: var(--muted); font-size: 12px; }
+
+  main { max-width: 1180px; margin: 0 auto; }
+  h2 { font-size: 14px; font-weight: 600; margin: 34px 0 6px; }
+  h2:first-of-type { margin-top: 8px; }
+  h2 + .lede { margin: 0 0 14px; color: var(--muted); font-size: 12px; max-width: 80ch; }
+  .frames { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+  figure { margin: 0; }
+  figcaption { margin-top: 9px; color: var(--muted); font-size: 12px; max-width: 300px; }
+  figcaption b { color: var(--fg); font-weight: 600; }
+
+  /* ---- 侧栏模型 ---- */
+  .sidebar { width: 268px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 8px 8px; box-shadow: var(--shadow); }
+  .brand { display: flex; align-items: center; gap: 8px; padding: 2px 4px 10px; }
+  .brand .name { font-size: 15px; font-weight: 600; letter-spacing: -.02em; }
+  .brand .tag { background: #111; color: #fff; font-size: 8px; font-weight: 700; padding: 2px 4px; border-radius: 3px; margin-left: 5px; vertical-align: 2px; }
+  html[data-theme="dark"] .brand .tag { background: #f2f2f2; color: #111; }
+  .newchat { display: flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line); border-radius: 9px; padding: 8px; color: var(--fg); }
+
+  /* ---- 工作区标题栏 ---- */
+  .sect { display: flex; align-items: center; gap: 2px; padding: 12px 6px 4px; color: var(--muted); }
+  .sect .grow { flex: 1; min-width: 0; }
+  .sect .lab { position: relative; }
+  .hicon { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; color: var(--muted); flex: none; }
+  .hicon:hover { background: var(--hover); color: var(--fg); }
+
+  /* ---- 红点：本体 + 命中区 ---- */
+  .hbadge {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 15px; height: 15px; padding: 0 3.5px; border-radius: 999px;
+    background: var(--red); color: #fff;
+    font-size: 9.5px; font-weight: 700; line-height: 1;
+    font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+    box-shadow: 0 0 0 1.5px var(--dot-ring);
+  }
+  .hbadge.zero { background: var(--zero-bg); }
+  /* 命中区：本体四周各外扩 4px（约 23×23），用负 margin 抵消布局占位 */
+  .hit { display: inline-flex; padding: 4px; margin: -4px; border-radius: 7px; position: relative; z-index: 2; }
+  .hit:hover { background: var(--hover); }
+  .hit.show::after { content: ""; position: absolute; inset: 0; border: 1px dashed var(--red); border-radius: 7px; opacity: .55; }
+
+  /* C1「轻搭」：压住字的右上角一点点，靠描边分开 */
+  .corner { position: absolute; top: -7px; right: -9px; }
+  /* C2「完全让开」：整体退到字外，一点都不压 */
+  .corner.clear { top: -8px; right: -15px; }
+
+  .ws { display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: 8px; }
+  .ws .grow { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .iconwrap { position: relative; display: inline-flex; width: 16px; height: 16px; flex: none; }
+  .dot { position: absolute; top: -3px; right: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--red); box-shadow: 0 0 0 1.5px var(--dot-ring); }
+
+  /* ---- 底栏（对照用）---- */
+  .foot { display: flex; align-items: center; gap: 6px; margin-top: 12px; padding-top: 9px; border-top: 1px solid var(--line); }
+  .fbtn { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--fg); }
+  .fbtn.ghost { border-color: transparent; padding: 0 8px; }
+  .fbtn.dim { opacity: .5; }
+  .badge16 { position: absolute; top: -6px; right: -6px; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 999px; background: var(--red); color: #fff; font-size: 10px; font-weight: 700; }
+
+  /* ---- 卡片 / 放大 ---- */
+  .card { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .card .cap { margin-top: 12px; color: var(--muted); font-size: 12px; }
+  .card .cap b { color: var(--fg); }
+  .stage { transform: scale(3.4); transform-origin: left center; display: flex; align-items: center; height: 24px; }
+  .stage.wide { width: 150px; }
+  .rows { display: flex; flex-direction: column; gap: 26px; }
+  .row { display: flex; align-items: center; gap: 22px; }
+  .row .who { width: 132px; color: var(--muted); font-size: 12px; flex: none; }
+  table { border-collapse: collapse; font-size: 12px; margin-top: 4px; }
+  th, td { text-align: left; padding: 6px 16px 6px 0; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { color: var(--muted); font-weight: 600; }
+  code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  .mini { transform: scale(.62); transform-origin: left top; height: 92px; }
+  footer.pg { max-width: 1180px; margin: 40px auto 0; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>待处理红点 · 定稿确认</h1>
+  <p>你选的方案：把底栏那颗 <b>🔔 待处理</b> 按钮撤掉，红点搬到「工作区」标题的<b>右上角</b>；没有待处理时<b>不变灰消失，而是显示灰色的 0</b>。</p>
+  <div class="pick">已定 &nbsp;<b>落位 C</b> · 工作区标题右上角 &nbsp;|&nbsp; <b>无待处理 → 灰色 0</b></div>
+  <p style="margin-top:12px">还剩一件小事要你拍：红点跟「区」字<b>压多少</b>——下面 ② 里 C1 / C2 两种，其余（尺寸、数字、状态）我已按建议定好，你扫一眼有没有要改的。</p>
+  <div style="margin-top:14px;padding:10px 12px;border:1px solid var(--line);border-left:3px solid var(--red);border-radius:8px;background:var(--bg);max-width:86ch">
+    <b>实现后发现的两条真实约束</b>（这个预览页模拟不出来，真机 CSS 才有）：
+    <ol style="margin:6px 0 0;padding-left:20px">
+      <li><code>.sectionHeader</code> 高 <b>36px</b> 且 <code>overflow:hidden</code>；里面的 <code>.sectionLabel</code> 行高 <b>20px</b>，<b>它自己也</b> <code>overflow:hidden</code>。所以红点<b>不能</b>挂在标题元素里往上探——会被标题自己的 overflow 裁掉。实现改成：红点挂在标题行上、与标题平级，用实测 rect 定位，<code>top</code> 夹到 ≥0（只有 8px 余量）。<b>看起来仍是 C1 的样子</b>，但命中区改为 15px 本体 + 只向左右和下方外扩。</li>
+      <li>点搜索时标题会塌成 0 宽（<code>.sectionLabelHidden</code>），红点作为兄弟节点借不到它的 <code>visibility</code>，所以<b>搜索展开期间红点会自己隐藏</b>。</li>
+    </ol>
+  </div>
+  <div class="bar">
+    <div class="seg" role="group" aria-label="主题">
+      <button type="button" data-theme-btn="light" aria-pressed="true">浅色</button>
+      <button type="button" data-theme-btn="dark" aria-pressed="false">深色</button>
+    </div>
+    <span class="note">浅色深色都看一遍</span>
+  </div>
+</header>
+
+<main>
+
+<!-- ========== ① 放进真侧栏 ========== -->
+<h2>① 放进侧栏是什么样</h2>
+<p class="lede">左边：有待处理（红 2）。右边：没有待处理（灰 0，位置不变、不跳动）。</p>
+<div class="frames">
+
+  <figure>
+    <div class="sidebar">
+      <div class="brand">
+        <span class="iconwrap">
+          <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+            <path d="M4.2 12.6c0-3.3 2.9-5.8 6.5-5.8 3.3 0 5.4 1.6 6.2 4 .3 1 .7 1.4 1.6 1.7.7.2.8.7.3 1.2-.9.9-2.5 1.2-4.2 1-1.9-.2-3.4-1-4.6-2.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+            <path d="M15.9 7.4c.6-1 1.6-1.5 2.6-1.4-.2 1.2-.9 2.1-1.9 2.5" fill="var(--brand)" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+            <circle cx="8.4" cy="11" r="1" fill="#111"/>
+          </svg>
+        </span>
+        <span class="name">deepseek<span class="tag">HARNESS</span></span>
+      </div>
+      <div class="newchat">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.2" stroke="currentColor" stroke-width="1.3"/><path d="M8 5.4v5.2M5.4 8h5.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        新会话
+      </div>
+
+      <div class="sect">
+        <span class="lab">工作区<span class="hit"><span class="hbadge corner">2</span></span></span>
+        <span class="grow"></span>
+        <span class="hicon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.2" stroke="currentColor" stroke-width="1.3"/><path d="M10.2 10.2 13 13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>
+        <span class="hicon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4.4h3.4M7.6 4.4H14M2 8h6.2M10.4 8H14M2 11.6h2.6M6.8 11.6H14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="6.2" cy="4.4" r="1.35" stroke="currentColor" stroke-width="1.3"/><circle cx="9" cy="8" r="1.35" stroke="currentColor" stroke-width="1.3"/><circle cx="5.4" cy="11.6" r="1.35" stroke="currentColor" stroke-width="1.3"/></svg></span>
+        <span class="hicon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2.2 4.6c0-.5.4-.9.9-.9h3l1.1 1.4h5.7c.5 0 .9.4.9.9v5.4c0 .5-.4.9-.9.9H3.1c-.5 0-.9-.4-.9-.9V4.6Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M8 7.5v3M6.5 9h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>
+      </div>
+
+      <div class="ws"><span class="iconwrap"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg><span class="dot"></span></span><span class="grow">12000019_skills</span></div>
+      <div class="ws"><span class="iconwrap"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg><span class="dot"></span></span><span class="grow">12000018_agent&amp;skill&amp;mcp 管理</span></div>
+      <div class="ws"><span class="iconwrap"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span><span class="grow">12000000_全局问答</span></div>
+
+      <div class="foot">
+        <span class="fbtn ghost"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.1" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.9v1.6M8 12.5v1.6M1.9 8h1.6M12.5 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>设置</span>
+      </div>
+    </div>
+    <figcaption><b>有待处理</b><br>底栏只剩「设置」；红 2 挂在「工作区」右上角。</figcaption>
+  </figure>
+
+  <figure>
+    <div class="sidebar">
+      <div class="brand">
+        <span class="iconwrap">
+          <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+            <path d="M4.2 12.6c0-3.3 2.9-5.8 6.5-5.8 3.3 0 5.4 1.6 6.2 4 .3 1 .7 1.4 1.6 1.7.7.2.8.7.3 1.2-.9.9-2.5 1.2-4.2 1-1.9-.2-3.4-1-4.6-2.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+            <path d="M15.9 7.4c.6-1 1.6-1.5 2.6-1.4-.2 1.2-.9 2.1-1.9 2.5" fill="var(--brand)" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+            <circle cx="8.4" cy="11" r="1" fill="#111"/>
+          </svg>
+        </span>
+        <span class="name">deepseek<span class="tag">HARNESS</span></span>
+      </div>
+      <div class="newchat">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.2" stroke="currentColor" stroke-width="1.3"/><path d="M8 5.4v5.2M5.4 8h5.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        新会话
+      </div>
+
+      <div class="sect">
+        <span class="lab">工作区<span class="hit"><span class="hbadge zero corner">0</span></span></span>
+        <span class="grow"></span>
+        <span class="hicon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.2" stroke="currentColor" stroke-width="1.3"/><path d="M10.2 10.2 13 13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>
+        <span class="hicon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4.4h3.4M7.6 4.4H14M2 8h6.2M10.4 8H14M2 11.6h2.6M6.8 11.6H14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="6.2" cy="4.4" r="1.35" stroke="currentColor" stroke-width="1.3"/><circle cx="9" cy="8" r="1.35" stroke="currentColor" stroke-width="1.3"/><circle cx="5.4" cy="11.6" r="1.35" stroke="currentColor" stroke-width="1.3"/></svg></span>
+        <span class="hicon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2.2 4.6c0-.5.4-.9.9-.9h3l1.1 1.4h5.7c.5 0 .9.4.9.9v5.4c0 .5-.4.9-.9.9H3.1c-.5 0-.9-.4-.9-.9V4.6Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M8 7.5v3M6.5 9h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>
+      </div>
+
+      <div class="ws"><span class="iconwrap"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span><span class="grow">12000019_skills</span></div>
+      <div class="ws"><span class="iconwrap"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span><span class="grow">12000018_agent&amp;skill&amp;mcp 管理</span></div>
+      <div class="ws"><span class="iconwrap"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span><span class="grow">12000000_全局问答</span></div>
+
+      <div class="foot">
+        <span class="fbtn ghost"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.1" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.9v1.6M8 12.5v1.6M1.9 8h1.6M12.5 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>设置</span>
+      </div>
+    </div>
+    <figcaption><b>没有待处理</b><br>灰 0 留在原位。好处：位置不跳、一眼知道功能还在；点它照样能打开清单（里面写「现在没有需要你处理的事情」）。</figcaption>
+  </figure>
+
+</div>
+
+<!-- ========== ② C1 / C2 ========== -->
+<h2>② 要你拍的一件事：红点压不压「区」字（放大 ×3.4）</h2>
+<p class="lede">两种都行，观感不同。左边更"贴"、像徽章；右边更"让"、完全不碰字。我建议 C1。</p>
+<div class="frames">
+  <figure>
+    <div class="card">
+      <div class="stage wide"><span class="lab" style="position:relative">工作区<span class="hit"><span class="hbadge corner">2</span></span></span></div>
+      <div class="cap"><b>C1 · 轻搭（推荐）</b><br>红点压住「区」右上角约 6px，靠 1.5px 底色描边把字和红点分开。<br><code>top:-7px right:-9px</code></div>
+    </div>
+  </figure>
+  <figure>
+    <div class="card">
+      <div class="stage wide"><span class="lab" style="position:relative">工作区<span class="hit"><span class="hbadge corner clear">2</span></span></span></div>
+      <div class="cap"><b>C2 · 完全让开</b><br>整体退到字外，一个像素都不压；代价是横向多占 6px，看起来更像"第四个图标"而不是角标。<br><code>top:-8px right:-15px</code></div>
+    </div>
+  </figure>
+</div>
+
+<!-- ========== ③ 数字状态 ========== -->
+<h2>③ 各种数字（放大 ×3.4）</h2>
+<p class="lede">1 位最窄、3 位会自动变宽（红点自然拉长，不是截断）。</p>
+<div class="frames">
+  <figure>
+    <div class="card">
+      <div class="rows">
+        <div class="row"><span class="who">没有待处理</span><span class="stage"><span class="hbadge zero">0</span></span></div>
+        <div class="row"><span class="who">1 个</span><span class="stage"><span class="hbadge">1</span></span></div>
+        <div class="row"><span class="who">2 个（你的截图）</span><span class="stage"><span class="hbadge">2</span></span></div>
+        <div class="row"><span class="who">12 个</span><span class="stage"><span class="hbadge">12</span></span></div>
+        <div class="row"><span class="who">100+ 个</span><span class="stage"><span class="hbadge">99+</span></span></div>
+      </div>
+    </div>
+    <figcaption>超过 99 收敛成 <code>99+</code>，免得红点撑太宽。</figcaption>
+  </figure>
+
+  <figure>
+    <div class="card">
+      <div class="rows">
+        <div class="row"><span class="who">默认</span><span class="stage"><span class="hit"><span class="hbadge">2</span></span></span></div>
+        <div class="row"><span class="who">鼠标悬停</span><span class="stage"><span class="hit" style="background:var(--hover)"><span class="hbadge">2</span></span></span></div>
+        <div class="row"><span class="who">命中区示意</span><span class="stage"><span class="hit show"><span class="hbadge">2</span></span></span></div>
+      </div>
+      <div class="cap">红点本身就是按钮：悬停给一块 23×23 的浅底表示可点；虚线框是实际可点范围（比红点本体大一圈，手指/鼠标不容易点空）。</div>
+    </div>
+    <figcaption>点它 → 打开原来那份「待处理的会话」清单；点清单里的条目 → 跳到那个会话。</figcaption>
+  </figure>
+</div>
+
+<!-- ========== ④ 规格 ========== -->
+<h2>④ 规格（定了我就照这个实现）</h2>
+<div class="frames">
+  <figure>
+    <div class="card" style="width:430px">
+      <table>
+        <tr><th>项</th><th>值</th></tr>
+        <tr><td>位置</td><td>「工作区」标签右上角</td></tr>
+        <tr><td>偏移</td><td><code>top:-7px</code> <code>right:-9px</code>（C1）</td></tr>
+        <tr><td>本体尺寸</td><td>高 15px，最小宽 15px，左右内边距 3.5px</td></tr>
+        <tr><td>圆角 / 字号</td><td>999px 全圆 · 9.5px 粗体 · 等宽数字</td></tr>
+        <tr><td>有待处理</td><td>红 <code>#e5484d</code> + 白字</td></tr>
+        <tr><td>无待处理</td><td>灰（浅色 <code>#b6bcc4</code> / 深色 <code>#4a4e55</code>）+ 白字「0」</td></tr>
+        <tr><td>描边</td><td>1.5px 侧栏底色，把红点和底下的字分开</td></tr>
+        <tr><td>命中区</td><td>约 23×23（本体四周各外扩 4px）</td></tr>
+        <tr><td>底栏</td><td>撤掉「待处理」按钮，只剩「设置」</td></tr>
+        <tr><td>点击</td><td>不变：打开待处理清单</td></tr>
+      </table>
+    </div>
+    <figcaption>高度上不新增任何行——原来那颗按钮占的 32px 整行省掉了。</figcaption>
+  </figure>
+
+  <figure>
+    <div class="card" style="width:330px">
+      <div class="cap" style="margin:0 0 10px"><b>改前 → 改后（底栏对比）</b></div>
+      <div style="border:1px solid var(--line); border-radius:8px; padding:10px; margin-bottom:12px">
+        <div class="cap" style="margin:0 0 6px">改前</div>
+        <div class="foot" style="margin:0; padding:0; border:0">
+          <span class="fbtn"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2.2a3.6 3.6 0 0 0-3.6 3.6v2.4L3.2 11h9.6l-1.2-2.8V5.8A3.6 3.6 0 0 0 8 2.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6.4 12.8a1.6 1.6 0 0 0 3.2 0" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>待处理<span class="badge16">2</span></span>
+          <span class="fbtn ghost"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.1" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.9v1.6M8 12.5v1.6M1.9 8h1.6M12.5 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>设置</span>
+        </div>
+      </div>
+      <div style="border:1px solid var(--line); border-radius:8px; padding:10px">
+        <div class="cap" style="margin:0 0 6px">改后</div>
+        <div class="foot" style="margin:0; padding:0; border:0">
+          <span class="fbtn ghost"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.1" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.9v1.6M8 12.5v1.6M1.9 8h1.6M12.5 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>设置</span>
+        </div>
+      </div>
+      <div class="cap">少一行 32px 的高度、少 4 个字。</div>
+    </div>
+    <figcaption>底栏腾空之后，如果以后还想放别的入口，位置也松快了。</figcaption>
+  </figure>
+</div>
+
+<!-- ========== ⑤ 参考 ========== -->
+<h2>⑤ 参考：另外三种落位（已否，留着你反悔）</h2>
+<p class="lede">按 0.62 缩略，只看相对位置。</p>
+<div class="frames">
+  <figure><div class="mini"><div class="card" style="width:268px"><div class="sect"><span class="grow">工作区</span><span class="hicon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.2" stroke="currentColor" stroke-width="1.3"/><path d="M10.2 10.2 13 13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span><span class="hicon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4.4h3.4M7.6 4.4H14M2 8h6.2M10.4 8H14M2 11.6h2.6M6.8 11.6H14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span><span class="hicon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2.2 4.6c0-.5.4-.9.9-.9h3l1.1 1.4h5.7c.5 0 .9.4.9.9v5.4c0 .5-.4.9-.9.9H3.1c-.5 0-.9-.4-.9-.9V4.6Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span><span class="hit"><span class="hbadge">2</span></span></div></div></div><figcaption><b>A · 最右</b></figcaption></figure>
+  <figure><div class="mini"><div class="card" style="width:268px"><div class="sect"><span class="grow">工作区</span><span class="hit"><span class="hbadge">2</span></span><span class="hicon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.2" stroke="currentColor" stroke-width="1.3"/><path d="M10.2 10.2 13 13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span><span class="hicon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4.4h3.4M7.6 4.4H14M2 8h6.2M10.4 8H14M2 11.6h2.6M6.8 11.6H14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span><span class="hicon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2.2 4.6c0-.5.4-.9.9-.9h3l1.1 1.4h5.7c.5 0 .9.4.9.9v5.4c0 .5-.4.9-.9.9H3.1c-.5 0-.9-.4-.9-.9V4.6Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span></div></div></div><figcaption><b>B · 最左</b></figcaption></figure>
+  <figure><div class="mini"><div class="card" style="width:268px"><div class="sect"><span class="grow">工作区</span><span class="hicon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.2" stroke="currentColor" stroke-width="1.3"/><path d="M10.2 10.2 13 13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span><span class="hit"><span class="hbadge">2</span></span><span class="hicon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4.4h3.4M7.6 4.4H14M2 8h6.2M10.4 8H14M2 11.6h2.6M6.8 11.6H14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span><span class="hicon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2.2 4.6c0-.5.4-.9.9-.9h3l1.1 1.4h5.7c.5 0 .9.4.9.9v5.4c0 .5-.4.9-.9.9H3.1c-.5 0-.9-.4-.9-.9V4.6Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span></div></div></div><figcaption><b>D · 夹在中间</b></figcaption></figure>
+</div>
+
+</main>
+
+<footer class="pg">
+  静态模型，只为定"放哪儿、多大、灰 0 长什么样"；不连接 DSH、不影响任何正在跑的功能。你点头我就改插件实现。
+</footer>
+
+<script>
+  const html = document.documentElement;
+  const buttons = document.querySelectorAll("[data-theme-btn]");
+  for (const button of buttons) {
+    button.addEventListener("click", () => {
+      html.dataset.theme = button.dataset.themeBtn;
+      for (const other of buttons) other.setAttribute("aria-pressed", String(other === button));
+    });
+  }
+</script>
+</body>
+</html>

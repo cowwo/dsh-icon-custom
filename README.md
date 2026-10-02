@@ -43,6 +43,38 @@ Notes:
 - It can be toggled at any time after upload — no re-upload needed.
 - This only affects the sidebar brand mark (the one next to `deepseek HARNESS`); PWA/installed-app icons are a separate option above.
 
+## App icon badge (the red dot on the system icon)
+
+Once the page is **installed as an app**, the same unread number is also shown on the **system icon**. The switch lives in **Settings → icon管理 → unread badge** ("Badge the system app icon") and is **on by default**; the number is **exactly the page number** (one computation, no extra clamping), so the two can never disagree.
+
+> ⚠️ **What it looks like on Windows depends on which browser installed the app**:
+> - **Installed with Chrome**: Chrome **draws its own overlay icon** on the taskbar button — a **dark circle with the white number**, at the lower-right of the icon. **Not a red dot, and not part of our artwork.** Above 99 it shows `99+`.
+> - **Installed with Edge**: Edge goes through the **Windows badge channel**, so the badge uses the system style. Microsoft's docs say both empty and numeric badges are supported, but on Windows 11 this machine still drew only a system-blue dot when calling `navigator.setAppBadge(7)` directly from DevTools (2026-10-01). The plugin now has a **5-second low-frequency watchdog** that keeps re-asserting a positive number, but whether Edge/Windows renders it as a number or a dot is ultimately up to the system. For a reliable number, installing with Chrome is the current workaround.
+>
+> Either way it exists **only while the app window is open**: close the window and it is gone (that is not a bug), and nothing can refresh it afterwards (there is no push server, so with no page running there is no code running).
+
+Platform support as of 0.11.1:
+
+| Platform | Badge | Status |
+|---|---|---|
+| Windows **Chrome** 81+ | Dark circle + **white number** (Chrome's own overlay icon, lower-right) | Confirmed by Chrome's docs screenshot + Chromium source; **not yet measured on this machine** |
+| Windows **Edge** 81+ | Goes through the Windows badge channel; Microsoft's docs support numbers, but this machine measured the number being drawn as a dot | **Measured anomaly** (2026-10-01) |
+| macOS Chrome / Edge 81+ | Dock badge | Unverified (the code is ready; same single call) |
+| macOS Safari 17+ ("Add to Dock") | Dock badge | Unverified |
+| iOS / iPadOS Safari 16.4+ (Add to Home Screen) | Number on the home-screen icon | Unverified; and it appears **only after notifications have been granted** — this plugin does not request that permission yet, so no badge on iOS for now |
+| Android Chrome / Edge | — | **Not supported by the system**: Chromium compiles the badge implementation out on Android, and a launcher dot can only come from a **notification** (this plugin posts none) |
+| HarmonyOS | — | No public evidence of any implementation; **expected unsupported** (native badges there are ArkTS-only) |
+| Firefox / Linux Chromium | — | No API / no OS API — calls resolve and do nothing |
+
+The "Current environment" line in the settings page reports **local facts only** (secure context? API present? installed as an app?). It never promises a badge will appear, because **detecting the API is not delivery** (that is exactly the Android and Linux case, and iOS adds a permission on top). Whether it really shows is up to the system.
+
+Two behaviours that look like bugs but are not:
+
+- **A "manual test" number typed in a normal browser tab produces no taskbar badge** — correct: the badge belongs to the **installed app window**; a plain tab's call is silently ignored.
+- **No badge when the page is reached over LAN `http://192.168.x.x`** — the Badging API requires a secure context; the settings page then says to use localhost or https.
+
+The reasoning (why no notifications, why no service worker, why no platform gating) is recorded in [`docs/adr/0005-app-icon-badge.md`](./docs/adr/0005-app-icon-badge.md).
+
 ## Format support
 
 - **SVG** — recognized by content (`<svg`), validated against script / event‑handler / `javascript:` injection. Rasterized to PNG in the browser before upload.

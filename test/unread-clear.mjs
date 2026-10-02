@@ -1,7 +1,11 @@
-// 「红点点了也不消」的回归测试(0.10.2)。
+// 「红点什么时候才消」的回归测试。
 // 跑法:在仓库根目录 `node test/unread-clear.mjs`(它从 client/client.js 里切真实代码,
 // 只桩掉 React / localStorage / 定时器,所以测的是即将发布的代码本身)。
-// 抽的是 client/client.js 里的真实代码(见各 slice 的注释),只桩掉 React/localStorage/定时器。
+//
+// 本文件锁的是「规则 A」(0.11.1,docs/adr/0006-entry-bounded-stay-clock.md):
+//   * 停留计时器由「**进入会话**」上弦,不由「又结束一轮」上弦;
+//   * 上弦那一刻的快照是固定的 —— 你人已经在会话里时新结束的那一轮,不算数,
+//     它会一直亮着,等你切走再进来才清。
 import { readFileSync } from 'node:fs'
 const src = readFileSync('client/client.js', 'utf8')
 
@@ -37,15 +41,15 @@ function makeStore(initial) {
 }
 
 // —— 2. 会话判定 ——
-const helperSrc = slice('function currentSessionIds(list) {', '\n\t\t/**\n\t\t * How many sessions', 'currentSessionIds/lastTurnEndAt/stayKeyFor')
+const helperSrc = slice('function currentSessionIds(list) {', '\n\t\t/**\n\t\t * How many sessions', 'currentSessionIds/lastTurnEndAt')
 const collectSrc = slice('function collectUnread(list, pending, config, seen) {', '\n\t\t//#endregion', 'collectUnread')
-const helpers = new Function('LAST_TURN_END_KEY', helperSrc + '\n' + collectSrc + '\nreturn { currentSessionIds, lastTurnEndAt, stayKeyFor, collectUnread }')('lastTurnEnd')
+const helpers = new Function('LAST_TURN_END_KEY', helperSrc + '\n' + collectSrc + '\nreturn { currentSessionIds, lastTurnEndAt, collectUnread }')('lastTurnEnd')
 
-// —— 3. BadgeSource 里那段真实的 effect(计时链 + 看门狗)——
-const effectBody = slice('if (staySignature === "") return undefined;', '}, [staySignature, delayMs]);', 'stay effect')
+// —— 3. BadgeSource 里那段真实的 effect(上弦 + 单次到点)——
+const effectBody = slice('const snapshot = stayLive.current.list !==', '}, [staySignature, delayMs]);', 'stay effect')
 
 const CONFIG = { reasons: { completed: true, error: true }, pending: true, workspaceDot: true, clearDelaySec: 5 }
-const HOST_END = 1790773769922          // 真实数据:该会话最后一次结束(宿主时钟)
+const HOST_END = 1790773769922          // 真实数据:某会话最后一次结束(宿主时钟)
 const REAL_WATERMARK = 1790773162000    // 真实数据:最后一次在它里面(比结束早 7.9 秒)
 
 /** 确定性调度器:替掉 window.setTimeout,时间由测试推进。 */
@@ -73,17 +77,20 @@ function scheduler() {
 }
 
 /**
- * 跑一次「进入会话并连续停留 stayMs」,返回结束时各会话是不是还红着。
- * @param browserBehindMs - 浏览器时钟比宿主慢多少(宿主 = 浏览器 + 这个值)
- * @param rows - 会话行;默认只有一个被 mainView 保留的会话 V
- * @param raceEndAt - 第一次计时到点后,把 V 的结束时间换成这个值(模拟"标记刚落下又来一次新结束")
+ * 一个"页面"的模拟器,照 React 的语义跑那段 effect:**deps 没变就不重跑**。
+ * 这一点是规则 A 的成败点——你待在会话里时又结束一轮,签名不变,计时器不该被动过。
  * @param delaySec - clearDelaySec
+ * @param rows - 初始会话行 `{ id, endAt, mainView }`
+ * @param browserBehindMs - 浏览器时钟比宿主慢多少(宿主 = 浏览器 + 这个值)
  */
-function stay({ browserBehindMs = 0, stayMs = 30000, rows = null, raceEndAt = null, delaySec = 5 } = {}) {
+function makeSim({ delaySec = 5, rows = [], browserBehindMs = 0 } = {}) {
   const config = { ...CONFIG, clearDelaySec: delaySec }
   const list = { ids: [], byId: {} }
-  const mk = (id, endAt, mainView) => { list.byId[id] = { id, projectionValues: { lastTurnEnd: { endAt, reason: 'error' } }, retainedBy: mainView ? { mainView: 1 } : {} }; list.ids.push(id) }
-  for (const r of rows === null ? [{ id: 'V', endAt: HOST_END, mainView: true }] : rows) mk(r.id, r.endAt, r.mainView)
+  const mk = (id, endAt, mainView) => {
+    list.byId[id] = { id, projectionValues: { lastTurnEnd: { endAt, reason: 'error' } }, retainedBy: mainView ? { mainView: 1 } : {} }
+    if (!list.ids.includes(id)) list.ids.push(id)
+  }
+  for (const r of rows) mk(r.id, r.endAt, r.mainView !== false)
 
   // 浏览器时钟 = 宿主时钟 - browserBehindMs;Date.now() 与宿主样本都出自这一个假时钟
   const hostBase = HOST_END + 600000
@@ -91,28 +98,51 @@ function stay({ browserBehindMs = 0, stayMs = 30000, rows = null, raceEndAt = nu
   globalThis.Date = class extends RealDate { static now() { return hostBase - browserBehindMs } }
 
   const seed = {}
-  for (const r of rows === null ? [{ id: 'V' }] : rows) seed[r.id] = REAL_WATERMARK
+  for (const r of rows) seed[r.id] = REAL_WATERMARK
   const { api } = makeStore({ 'dsh-icon-custom.unread-seen.v2': JSON.stringify({ domain: 'host', lastActiveAt: HOST_END - 86400000, seen: seed }) })
   api.noteHostClock(hostBase)               // 宿主给出自己的 now → 客户端学到偏移
 
   const sched = scheduler()
-  const seenRef = api.seenState
-  const runEffect = new Function('staySignature', 'delayMs', 'stayLive', 'seenState', 'noteSeen', 'saveSeenState', 'bumpStay', 'window', 'lastTurnEndAt', effectBody + '\nreturn undefined;')
-  const signatureOf = () => helpers.currentSessionIds(list)
-    .filter((id) => helpers.collectUnread(list, null, config, seenRef.seen).some((i) => i.id === id))
-    .map((id) => helpers.stayKeyFor(id, list)).join('|')
-  runEffect(signatureOf(), delaySec * 1000, { current: { list } }, seenRef, api.noteSeen, api.saveSeenState, () => {}, sched.window, helpers.lastTurnEndAt)
+  const stayLive = { current: { list } }
+  const stayArmed = { current: new Map() }
+  const run = new Function('staySignature', 'stayIds', 'delayMs', 'stayLive', 'stayArmed', 'seenState', 'noteSeen', 'saveSeenState', 'bumpStay', 'window', 'lastTurnEndAt', effectBody + '\nreturn undefined;')
+  let cleanup = null
+  let lastSig = null
 
-  sched.advance(delaySec * 1000 + 100)      // 走到第一次计时到点(以及它的看门狗重排)
-  if (raceEndAt !== null) list.byId.V.projectionValues.lastTurnEnd.endAt = raceEndAt
-  sched.advance(stayMs)
-  globalThis.Date = RealDate
-  return {
-    seen: seenRef.seen,
-    domain: seenRef.domain,
-    hostNow: api.hostNow,
-    red: (id) => helpers.collectUnread(list, null, config, seenRef.seen).some((i) => i.id === id)
+  /** 一次渲染:只有"被看着的会话集合"变了才会拆掉旧计时器、重新上弦。 */
+  const render = () => {
+    stayLive.current = { list }
+    const stayIds = helpers.currentSessionIds(list).slice().sort()
+    const sig = stayIds.join('|')
+    if (sig === lastSig) return
+    lastSig = sig
+    if (typeof cleanup === "function") cleanup()   // 空集合时 effect 提前返回,没有 cleanup
+    cleanup = run(sig, stayIds, delaySec * 1000, stayLive, stayArmed, api.seenState, api.noteSeen, api.saveSeenState, () => {}, sched.window, helpers.lastTurnEndAt)
   }
+
+  const sim = {
+    render,
+    advance: (ms) => sched.advance(ms),
+    /** 新一轮结束(只改 projection,不碰"被看着的会话集合")。 */
+    setEndAt(id, endAt) { list.byId[id].projectionValues.lastTurnEnd.endAt = endAt },
+    /** 切走/切回来:把"被看着的会话"换成这一组。 */
+    view(ids) {
+      for (const id of ids) if (!list.byId[id]) mk(id, 0, true)
+      for (const row of Object.values(list.byId)) row.retainedBy = ids.includes(row.id) ? { mainView: 1 } : {}
+      list.ids = Object.keys(list.byId)
+    },
+    red: (id) => helpers.collectUnread(list, null, config, api.seenState.seen).some((i) => i.id === id),
+    count: () => helpers.collectUnread(list, null, config, api.seenState.seen).length,
+    mark: (id) => api.seenState.seen[id],
+    restore: () => { globalThis.Date = RealDate }
+  }
+  return sim
+}
+
+/** 跑一个场景,结束后一定还原时钟(后面的用例要用真的 Date.now)。 */
+function scenario(options, fn) {
+  const sim = makeSim(options)
+  try { fn(sim) } finally { sim.restore() }
 }
 
 let pass = 0, fail = 0
@@ -122,21 +152,107 @@ const check = (n, got, want) => {
   console.log((ok ? '  ✓ ' : '  ✗ ') + n + (ok ? '' : `\n      期望=${JSON.stringify(want)}\n      实际=${JSON.stringify(got)}`))
 }
 
-console.log('— 时钟域:水位与 turn/end.time 必须在同一个时钟 —')
-check('浏览器与宿主同钟 → 停留后红点消失', stay().red('V'), false)
-check('浏览器比宿主慢 30 秒(修复前:永远不消) → 仍然消失', stay({ browserBehindMs: 30000 }).red('V'), false)
-check('慢 30 秒 + clearDelaySec=0(修复前最容易被时钟打穿) → 也消失', stay({ browserBehindMs: 30000, delaySec: 0 }).red('V'), false)
-check('宿主比浏览器慢 45 秒(反向偏差)→ 也消失', stay({ browserBehindMs: -45000 }).red('V'), false)
+console.log('— 进入时已经存在的结束:停留够秒数 → 消 —')
+scenario({ rows: [{ id: 'V', endAt: HOST_END }] }, (sim) => {
+  sim.render()
+  check('刚进入:红点亮', sim.red('V'), true)
+  sim.advance(4900)
+  check('待 4.9 秒:还亮', sim.red('V'), true)
+  sim.advance(200)
+  check('待满 5 秒:消(记的是它自己的 endAt)', sim.mark('V'), HOST_END)
+  check('红点灭了', sim.red('V'), false)
+})
 
-console.log('— 多个 mainView 会话:每个会话各算各的时钟 —')
+console.log('— 规则 A:待在会话里时新结束的一轮,不追认 —')
+scenario({ rows: [{ id: 'V', endAt: HOST_END }] }, (sim) => {
+  sim.render()                      // 进入会话 → 上弦(HOST_END)
+  sim.advance(1000)
+  sim.setEndAt('V', HOST_END + 60000)  // 你还坐在里面,它又跑完一轮
+  sim.render()                      // 重渲染:deps(被看着的会话)没变 → 计时器不重跑
+  sim.advance(60000)
+  check('新结束的那一轮仍然亮着(修复前:5 秒后自动消)', sim.red('V'), true)
+  check('水位停在进入时那一轮,没有被追认到新的', sim.mark('V'), HOST_END)
+
+  sim.view([])                      // 你切走
+  sim.render()
+  sim.advance(1000)
+  check('切走后仍然亮着(离开不会顺手读掉它)', sim.red('V'), true)
+
+  sim.view(['V'])                   // 你再进来
+  sim.render()
+  sim.advance(4900)
+  check('切回来待 4.9 秒:还亮', sim.red('V'), true)
+  sim.advance(200)
+  check('切回来待满 5 秒:这一轮才算看过', sim.mark('V'), HOST_END + 60000)
+  check('红点灭了', sim.red('V'), false)
+})
+
+console.log('— 停留不足就切走:不算看过 —')
+scenario({ rows: [{ id: 'V', endAt: HOST_END }] }, (sim) => {
+  sim.render()
+  sim.advance(3000)
+  sim.view([])                      // 3 秒就切走
+  sim.render()
+  sim.advance(60000)
+  check('没待满 → 水位没动', sim.mark('V'), REAL_WATERMARK)
+  check('切回来还在(要重新待满)', (sim.view(['V']), sim.render(), sim.red('V')), true)
+})
+
+console.log('— 延迟设成 0:进入即已读,但停留期间的新结束仍要等你下次进入 —')
+scenario({ delaySec: 0, rows: [{ id: 'V', endAt: HOST_END }] }, (sim) => {
+  sim.render()
+  check('进入时存在的那一轮:立即消', sim.red('V'), false)
+  sim.setEndAt('V', HOST_END + 60000)
+  sim.render()
+  sim.advance(60000)
+  check('停留期间新结束的那一轮:仍然亮着', sim.red('V'), true)
+})
+
+console.log('— 本次真实故障(session-3b40e835):回合在你在场时结束 —')
 {
-  const r = stay({ rows: [{ id: 'OTHER', endAt: HOST_END - 60000, mainView: true }, { id: 'V', endAt: HOST_END, mainView: true }] })
-  check('当前会话排在第二个(修复前:它永远清不掉) → 消失', r.red('V'), false)
-  check('排第一的那个也一并记成已读', r.red('OTHER'), false)
+  const T1 = Date.parse('2026-10-01T05:29:50.529Z')   // 第 1 回合结束(已读)
+  const T2 = Date.parse('2026-10-01T05:30:57.567Z')   // 第 2 回合结束,人还在会话里
+  scenario({ rows: [{ id: 'V', endAt: T1 }] }, (sim) => {
+    sim.render()
+    sim.advance(5000)               // 第 1 回合按规则被读掉
+    check('第 1 回合已读', sim.red('V'), false)
+    sim.setEndAt('V', T2)           // 05:30:57 第 2 回合结束
+    sim.render()
+    sim.advance(180000)             // 你读了 3 分钟
+    check('3 分钟后红点仍然亮着(修复前:05:31:02 就没了)', sim.red('V'), true)
+  })
 }
 
-console.log('— 看门狗:标记落下了但红点还在,不再一锤子买卖 —')
-check('第一次标记后冒出新结束 → 2 秒后重试并清掉', stay({ raceEndAt: HOST_END + 8000 }).red('V'), false)
+console.log('— 两个会话同时被看着:各上各的弦 —')
+scenario({ rows: [{ id: 'OTHER', endAt: HOST_END - 60000 }, { id: 'V', endAt: HOST_END }] }, (sim) => {
+  sim.render()
+  sim.advance(5000)
+  check('两个都消', [sim.red('V'), sim.red('OTHER')], [false, false])
+})
+
+console.log('— 中途挤进来一个会话(瞬时多一个"被看着的")不会刷新我的快照 —')
+scenario({ rows: [{ id: 'V', endAt: HOST_END }] }, (sim) => {
+  sim.render()                          // 进入 V → 快照 HOST_END
+  sim.setEndAt('V', HOST_END + 60000)   // V 又结束一轮
+  sim.view(['V', 'B'])                  // 打开另一个会话:面板先保留新的、再释放旧的
+  sim.render()
+  sim.view(['V'])
+  sim.render()
+  sim.advance(60000)
+  check('V 的新结束仍然亮着(快照没被顺带刷新)', sim.red('V'), true)
+})
+
+console.log('— 时钟域:浏览器与宿主差多少都不影响"待满即读" —')
+scenario({ rows: [{ id: 'V', endAt: HOST_END }], browserBehindMs: 30000 }, (sim) => {
+  sim.render()
+  sim.advance(5100)
+  check('浏览器比宿主慢 30 秒 → 照样消', sim.red('V'), false)
+})
+scenario({ rows: [{ id: 'V', endAt: HOST_END }], browserBehindMs: -45000 }, (sim) => {
+  sim.render()
+  sim.advance(5100)
+  check('宿主比浏览器慢 45 秒 → 照样消', sim.red('V'), false)
+})
 
 console.log('— 水位存储 —')
 {

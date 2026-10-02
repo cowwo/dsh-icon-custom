@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>未读红点 · 工作区标记 样式预览</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --page: #f4f5f6;
+    --panel: #f7f7f8;
+    --fg: #1a1a1a;
+    --muted: #8a8f98;
+    --line: #e6e8eb;
+    --hover: #eef0f2;
+    --red: #e5484d;
+    --green: #3fa45b;
+    --amber: #d9a032;
+    --brand: #f5c518;
+    --shadow: 0 10px 30px rgba(0, 0, 0, .16);
+    --dot-ring: #ffffff;
+  }
+  html[data-theme="dark"] {
+    --bg: #1b1c1e;
+    --page: #131415;
+    --panel: #232427;
+    --fg: #ecedee;
+    --muted: #8b9096;
+    --line: #33353a;
+    --hover: #2a2c30;
+    --shadow: 0 10px 30px rgba(0, 0, 0, .5);
+    --dot-ring: #232427;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 28px 24px 64px;
+    background: var(--page); color: var(--fg);
+    font: 13px/1.5 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  header { max-width: 1180px; margin: 0 auto 22px; }
+  h1 { font-size: 17px; font-weight: 600; margin: 0 0 6px; letter-spacing: -.01em; }
+  header p { margin: 0; color: var(--muted); max-width: 74ch; }
+  .bar { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg); }
+  .seg button {
+    appearance: none; border: 0; background: transparent; color: var(--fg);
+    font: inherit; padding: 5px 11px; cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+  .note { color: var(--muted); font-size: 12px; }
+
+  main { max-width: 1180px; margin: 0 auto; }
+  .frames { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+  figure { margin: 0; }
+  figcaption { margin-top: 9px; color: var(--muted); font-size: 12px; }
+  figcaption b { color: var(--fg); font-weight: 600; }
+
+  /* ---- 侧栏模型 ---- */
+  .sidebar {
+    width: 268px; background: var(--bg); border: 1px solid var(--line);
+    border-radius: 12px; padding: 10px 8px 8px; box-shadow: var(--shadow);
+  }
+  .brand { display: flex; align-items: center; gap: 8px; padding: 2px 4px 10px; }
+  .brand .name { font-size: 15px; font-weight: 600; letter-spacing: -.02em; }
+  .brand .tag {
+    background: #111; color: #fff; font-size: 8px; font-weight: 700;
+    padding: 2px 4px; border-radius: 3px; margin-left: 5px; vertical-align: 2px;
+  }
+  html[data-theme="dark"] .brand .tag { background: #f2f2f2; color: #111; }
+
+  .newchat {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    border: 1px solid var(--line); border-radius: 9px; padding: 8px; color: var(--fg);
+  }
+  .sect { display: flex; align-items: center; gap: 6px; padding: 12px 6px 4px; color: var(--muted); }
+  .sect .grow { flex: 1; }
+
+  .ws { display: flex; align-items: center; gap: 8px; padding: 6px 6px; border-radius: 8px; }
+  .ws .grow { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ws .meta { color: var(--muted); font-size: 12px; }
+  .ws.sel { background: var(--hover); }
+  .sess { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 30px; border-radius: 8px; }
+  .sess .grow { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sess .meta { color: var(--muted); font-size: 12px; }
+
+  .iconwrap { position: relative; display: inline-flex; width: 16px; height: 16px; flex: none; }
+  .dot {
+    position: absolute; top: -3px; right: -3px; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--red); box-shadow: 0 0 0 1.5px var(--dot-ring);
+  }
+  .pill {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
+    background: var(--red); color: #fff; font-size: 10px; font-weight: 700; line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .badge { position: absolute; top: -6px; right: -6px; }
+  .rowdot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  /* 紧跟标题的点：不是绝对定位，就排在文字后面 */
+  .dotline { width: 8px; height: 8px; border-radius: 50%; background: var(--red); flex: none; margin: 0 4px 0 6px; }
+  .rowmark { display: flex; align-items: center; gap: 6px; flex: none; }
+  .rowdot.green { background: var(--green); }
+  .rowdot.amber { background: var(--amber); }
+
+  .foot { display: flex; align-items: center; gap: 6px; margin-top: 12px; padding-top: 9px; border-top: 1px solid var(--line); }
+  .fbtn {
+    position: relative; display: inline-flex; align-items: center; gap: 6px;
+    height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--fg);
+  }
+  .fbtn.ghost { border-color: transparent; padding: 0 8px; }
+  .fbtn.dim { opacity: .55; }
+
+  /* ---- 弹层 ---- */
+  .pop {
+    margin-top: 10px; background: var(--bg); border: 1px solid var(--line);
+    border-radius: 12px; box-shadow: var(--shadow); padding: 8px; width: 286px;
+  }
+  .pop h4 { margin: 0; padding: 2px 6px 8px; font-size: 12px; font-weight: 600; }
+  .grp { padding: 7px 8px 3px; font-size: 11px; font-weight: 600; opacity: .55; }
+  .item { padding: 6px 8px; border-radius: 8px; }
+  .item:hover { background: var(--hover); }
+  .item .sub { opacity: .6; font-size: 11px; }
+
+  /* ---- 放大细节 ---- */
+  .detail { margin-top: 34px; }
+  .detail h2, .popwrap h2 { font-size: 14px; font-weight: 600; margin: 0 0 12px; }
+  .zooms { display: flex; gap: 26px; flex-wrap: wrap; }
+  .zoom { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .zoom .stage { transform: scale(3.4); transform-origin: left center; height: 22px; display: flex; align-items: center; }
+  .zoom .cap { margin-top: 12px; color: var(--muted); font-size: 12px; }
+  .popwrap { margin-top: 34px; }
+
+  footer.pg { max-width: 1180px; margin: 40px auto 0; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>未读红点 · 工作区标记样式预览</h1>
+  <p>静态模型，不连接 DSH —— 只为判断"点放在哪里、多大、什么颜色才顺眼"。下面依次是：①工作区标记三方案 ②放大细节 ③**会话行标记三方案（新）** ④铃铛与清单。</p>
+  <div class="bar">
+    <div class="seg" role="group" aria-label="主题">
+      <button type="button" data-theme-btn="light" aria-pressed="true">浅色</button>
+      <button type="button" data-theme-btn="dark" aria-pressed="false">深色</button>
+    </div>
+    <span class="note">点右上角"深色"看深色主题下的对比度</span>
+  </div>
+</header>
+
+<main>
+  <div class="frames">
+
+    <!-- ========== 方案 A ========== -->
+    <figure>
+      <div class="sidebar">
+        <div class="brand">
+          <span class="iconwrap" title="总未读数（画在这里）">
+            <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+              <path d="M4.2 12.6c0-3.3 2.9-5.8 6.5-5.8 3.3 0 5.4 1.6 6.2 4 .3 1 .7 1.4 1.6 1.7.7.2.8.7.3 1.2-.9.9-2.5 1.2-4.2 1-1.9-.2-3.4-1-4.6-2.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+              <path d="M15.9 7.4c.6-1 1.6-1.5 2.6-1.4-.2 1.2-.9 2.1-1.9 2.5" fill="var(--brand)" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+              <circle cx="8.4" cy="11" r="1" fill="#111"/>
+            </svg>
+            <span class="dot badge" style="width:14px;height:14px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;">1</span>
+          </span>
+          <span class="name">deepseek<span class="tag">HARNESS</span></span>
+        </div>
+
+        <div class="newchat">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6.2" stroke="currentColor" stroke-width="1.3"/><path d="M8 5.4v5.2M5.4 8h5.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          新会话
+        </div>
+
+        <div class="sect">
+          <span class="grow">工作区</span>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.2" stroke="currentColor" stroke-width="1.3"/><path d="M10.2 10.2 13 13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.5 4h5l1 1.4h5V12a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V4Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 5.5h10v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-7Z" stroke="currentColor" stroke-width="1.3"/><path d="M6.5 5.5V4a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1.5" stroke="currentColor" stroke-width="1.3"/></svg>
+        </div>
+
+        <!-- 有未读的工作区：方案 A 把点画在文件夹图标右上角 -->
+        <div class="ws">
+          <span class="iconwrap">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+            <span class="dot" title="这个工作区有未读"></span>
+          </span>
+          <span class="grow">12000016_标题生成</span>
+        </div>
+        <div class="sess"><span class="grow">DSH 标题生成插件设计</span><span class="meta">10 天</span></div>
+
+        <div class="ws">
+          <span class="iconwrap">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          </span>
+          <span class="grow">12000000_全局问答</span>
+        </div>
+        <div class="ws">
+          <span class="iconwrap">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+            <span class="dot"></span>
+          </span>
+          <span class="grow">12000009_替换网页图标</span>
+        </div>
+        <div class="ws">
+          <span class="iconwrap">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+            <span class="dot"></span>
+          </span>
+          <span class="grow">12000012_dsh通知</span>
+        </div>
+
+        <div class="foot">
+          <span class="fbtn">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2.2a3.6 3.6 0 0 0-3.6 3.6v2.4L3.2 11h9.6l-1.2-2.8V5.8A3.6 3.6 0 0 0 8 2.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6.4 12.8a1.6 1.6 0 0 0 3.2 0" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            待处理
+            <span class="dot badge" style="width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;">3</span>
+          </span>
+          <span class="fbtn ghost">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="2.1" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.9v1.6M8 12.5v1.6M1.9 8h1.6M12.5 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            设置
+          </span>
+          <span class="fbtn ghost">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2.4l1.5 3.6 3.6 1.5-3.6 1.5L8 12.6 6.5 9 2.9 7.5 6.5 6 8 2.4Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          </span>
+        </div>
+      </div>
+      <figcaption><b>方案 A · 文件夹图标右上角</b><br>纯红点、不带数字；点在图标右上，带一圈底色描边</figcaption>
+    </figure>
+
+    <!-- ========== 方案 B ========== -->
+    <figure>
+      <div class="sidebar">
+        <div class="brand">
+          <span class="iconwrap">
+            <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+              <path d="M4.2 12.6c0-3.3 2.9-5.8 6.5-5.8 3.3 0 5.4 1.6 6.2 4 .3 1 .7 1.4 1.6 1.7.7.2.8.7.3 1.2-.9.9-2.5 1.2-4.2 1-1.9-.2-3.4-1-4.6-2.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+              <path d="M15.9 7.4c.6-1 1.6-1.5 2.6-1.4-.2 1.2-.9 2.1-1.9 2.5" fill="var(--brand)" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+              <circle cx="8.4" cy="11" r="1" fill="#111"/>
+            </svg>
+            <span class="dot badge" style="width:14px;height:14px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;">1</span>
+          </span>
+          <span class="name">deepseek<span class="tag">HARNESS</span></span>
+        </div>
+
+        <div class="newchat">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6.2" stroke="currentColor" stroke-width="1.3"/><path d="M8 5.4v5.2M5.4 8h5.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          新会话
+        </div>
+
+        <div class="sect">
+          <span class="grow">工作区</span>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.2" stroke="currentColor" stroke-width="1.3"/><path d="M10.2 10.2 13 13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.5 4h5l1 1.4h5V12a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V4Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 5.5h10v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-7Z" stroke="currentColor" stroke-width="1.3"/><path d="M6.5 5.5V4a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1.5" stroke="currentColor" stroke-width="1.3"/></svg>
+        </div>
+
+        <!-- 方案 B：数字挂在名字后面 -->
+        <div class="ws">
+          <span class="iconwrap">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          </span>
+          <span class="grow">12000016_标题生成</span>
+          <span class="pill">1</span>
+        </div>
+        <div class="sess"><span class="grow">DSH 标题生成插件设计</span><span class="meta">10 天</span></div>
+
+        <div class="ws">
+          <span class="iconwrap">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          </span>
+          <span class="grow">12000000_全局问答</span>
+        </div>
+        <div class="ws">
+          <span class="iconwrap">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          </span>
+          <span class="grow">12000009_替换网页图标</span>
+          <span class="pill">2</span>
+        </div>
+        <div class="ws">
+          <span class="iconwrap">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          </span>
+          <span class="grow">12000012_dsh通知</span>
+        </div>
+
+        <div class="foot">
+          <span class="fbtn">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2.2a3.6 3.6 0 0 0-3.6 3.6v2.4L3.2 11h9.6l-1.2-2.8V5.8A3.6 3.6 0 0 0 8 2.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6.4 12.8a1.6 1.6 0 0 0 3.2 0" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            待处理
+            <span class="dot badge" style="width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;">3</span>
+          </span>
+          <span class="fbtn ghost">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="2.1" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.9v1.6M8 12.5v1.6M1.9 8h1.6M12.5 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            设置
+          </span>
+          <span class="fbtn ghost">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2.4l1.5 3.6 3.6 1.5-3.6 1.5L8 12.6 6.5 9 2.9 7.5 6.5 6 8 2.4Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          </span>
+        </div>
+      </div>
+      <figcaption><b>方案 B · 名字后面挂数字</b><br>能看出"几个"，但名字长时会被挤；数字和铃铛/清单重复</figcaption>
+    </figure>
+
+    <!-- ========== 现状 ========== -->
+    <figure>
+      <div class="sidebar">
+        <div class="brand">
+          <span class="iconwrap">
+            <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+              <path d="M4.2 12.6c0-3.3 2.9-5.8 6.5-5.8 3.3 0 5.4 1.6 6.2 4 .3 1 .7 1.4 1.6 1.7.7.2.8.7.3 1.2-.9.9-2.5 1.2-4.2 1-1.9-.2-3.4-1-4.6-2.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+              <path d="M15.9 7.4c.6-1 1.6-1.5 2.6-1.4-.2 1.2-.9 2.1-1.9 2.5" fill="var(--brand)" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+              <circle cx="8.4" cy="11" r="1" fill="#111"/>
+            </svg>
+            <span class="dot badge" style="width:14px;height:14px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;">3</span>
+          </span>
+          <span class="name">deepseek<span class="tag">HARNESS</span></span>
+        </div>
+
+        <div class="newchat">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6.2" stroke="currentColor" stroke-width="1.3"/><path d="M8 5.4v5.2M5.4 8h5.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          新会话
+        </div>
+
+        <div class="sect">
+          <span class="grow">工作区</span>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.2" stroke="currentColor" stroke-width="1.3"/><path d="M10.2 10.2 13 13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.5 4h5l1 1.4h5V12a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V4Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 5.5h10v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-7Z" stroke="currentColor" stroke-width="1.3"/><path d="M6.5 5.5V4a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1.5" stroke="currentColor" stroke-width="1.3"/></svg>
+        </div>
+
+        <div class="ws">
+          <span class="iconwrap">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          </span>
+          <span class="grow">12000016_标题生成</span>
+        </div>
+        <div class="sess"><span class="rowdot green"></span><span class="grow">DSH 标题生成插件设计</span><span class="meta">10 天</span></div>
+
+        <div class="ws">
+          <span class="iconwrap">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          </span>
+          <span class="grow">12000000_全局问答</span>
+        </div>
+        <div class="ws">
+          <span class="iconwrap">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          </span>
+          <span class="grow">12000009_替换网页图标</span>
+        </div>
+        <div class="ws">
+          <span class="iconwrap">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          </span>
+          <span class="grow">12000012_dsh通知</span>
+        </div>
+
+        <div class="foot">
+          <span class="fbtn">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2.2a3.6 3.6 0 0 0-3.6 3.6v2.4L3.2 11h9.6l-1.2-2.8V5.8A3.6 3.6 0 0 0 8 2.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6.4 12.8a1.6 1.6 0 0 0 3.2 0" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            待处理
+            <span class="dot badge" style="width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;">3</span>
+          </span>
+          <span class="fbtn ghost">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="2.1" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.9v1.6M8 12.5v1.6M1.9 8h1.6M12.5 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            设置
+          </span>
+          <span class="fbtn ghost">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2.4l1.5 3.6 3.6 1.5-3.6 1.5L8 12.6 6.5 9 2.9 7.5 6.5 6 8 2.4Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          </span>
+        </div>
+      </div>
+      <figcaption><b>现状</b>（铃铛 + logo 上有 3，但侧栏看不出在哪）<br>官方绿点=结束未看，琥珀点=等你</figcaption>
+    </figure>
+  </div>
+
+  <!-- ========== 放大细节 ========== -->
+  <section class="detail">
+    <h2>放大细节（×3.4）</h2>
+    <div class="zooms">
+      <div class="zoom">
+        <div class="stage">
+          <span class="iconwrap">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+            <span class="dot"></span>
+          </span>
+        </div>
+        <div class="cap">A · 8px 圆点，右上角，带 1.5px 底色描边</div>
+      </div>
+      <div class="zoom">
+        <div class="stage">
+          <span class="iconwrap">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          </span>
+        </div>
+        <div class="cap">没有未读时（对照组）</div>
+      </div>
+      <div class="zoom">
+        <div class="stage">
+          <span class="pill" style="transform:scale(1)">1</span>
+        </div>
+        <div class="cap">B · 16px 数字胶囊</div>
+      </div>
+      <div class="zoom">
+        <div class="stage" style="gap:14px">
+          <span class="rowdot green"></span><span class="rowdot amber"></span>
+        </div>
+        <div class="cap">官方会话行标记（6px，绿=结束未看 / 琥珀=等你）</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== 会话行标记 ========== -->
+  <section class="detail">
+    <h2>会话行要不要也标一个？三种放法</h2>
+    <div class="frames">
+
+      <!-- A：紧跟标题 -->
+      <figure>
+        <div class="sidebar">
+          <div class="ws">
+            <span class="iconwrap">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+              <span class="dot"></span>
+            </span>
+            <span class="grow">12000018_agent&skill&mcp 管理</span>
+          </div>
+          <div class="sess sel">
+            <span class="grow">我想做一个 agent&skill&mcp 管理的</span>
+            <span class="dotline" title="这个会话有未读"></span>
+            <span class="meta">24 分钟</span>
+          </div>
+          <div class="sess">
+            <span class="grow">另一个会话（没有未读）</span>
+            <span class="meta">18 天</span>
+          </div>
+          <div class="sess">
+            <span class="grow">标题很长的会话示例：帮我看看代码有没有优化空间</span>
+            <span class="dotline"></span>
+            <span class="meta">3 天</span>
+          </div>
+        </div>
+        <figcaption><b>方案 A · 紧跟标题</b>（推荐）<br>定位靠标题文本；不占官方那个左侧座位；跟时间戳无关。<br>第三条是"标题很长"的情况——点仍然跟在文字后面。</figcaption>
+      </figure>
+
+      <!-- A + 官方标记 -->
+      <figure>
+        <div class="sidebar">
+          <div class="ws">
+            <span class="iconwrap">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+              <span class="dot"></span>
+            </span>
+            <span class="grow">12000018_agent&skill&mcp 管理</span>
+          </div>
+          <div class="sess sel">
+            <span class="rowdot green"></span>
+            <span class="grow">我想做一个 agent&skill&mcp 管理的</span>
+            <span class="dotline"></span>
+            <span class="meta">24 分钟</span>
+          </div>
+          <div class="sess">
+            <span class="rowdot amber"></span>
+            <span class="grow">在等我审批的那个会话</span>
+            <span class="dotline"></span>
+            <span class="meta">1 小时</span>
+          </div>
+        </div>
+        <figcaption><b>方案 A + 官方已有标记</b><br>左边是官方的（绿=结束未看 / 琥珀=在等你），右边是我们的。<br>两者各在其位、不会打架。<br><span style="opacity:.75">也可以选"官方有标记时我们就不画"——更克制，但刷新后官方那个会消失。</span></figcaption>
+      </figure>
+
+      <!-- B：左侧并排 -->
+      <figure>
+        <div class="sidebar">
+          <div class="ws">
+            <span class="iconwrap">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M1.6 4.2c0-.6.5-1 1-1h3.2l1.2 1.5h6.4c.6 0 1 .4 1 1v6.1c0 .6-.4 1-1 1H2.6c-.5 0-1-.4-1-1V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+              <span class="dot"></span>
+            </span>
+            <span class="grow">12000018_agent&skill&mcp 管理</span>
+          </div>
+          <div class="sess sel">
+            <span class="rowdot green"></span>
+            <span class="dotline" style="margin:0"></span>
+            <span class="grow">我想做一个 agent&skill&mcp 管理的</span>
+            <span class="meta">24 分钟</span>
+          </div>
+        </div>
+        <figcaption><b>方案 B · 放行最左端</b>（不推荐）<br>两个点并排，看起来像同一个状态的两种颜色，反而更难读。</figcaption>
+      </figure>
+    </div>
+
+    <div class="zooms" style="margin-top:22px">
+      <div class="zoom">
+        <div class="stage" style="gap:0">
+          <span style="font-size:13px">我想做一个 agent&skill&mcp 管理的</span>
+          <span class="dotline" style="margin-left:6px"></span>
+        </div>
+        <div class="cap">×3.4 · 标题与点 6px、点与时间 4px、点本身 8px</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== 铃铛 + 清单 ========== -->
+  <section class="popwrap">
+    <h2>铃铛 + 清单（已经做好的样子，工作区已分组）</h2>
+    <div class="frames">
+      <div class="sidebar" style="width: 300px">
+        <div class="pop">
+          <h4>待处理的会话</h4>
+          <div class="grp">12000016_标题生成</div>
+          <div class="item">
+            <div>DSH 标题生成插件设计</div>
+            <div class="sub">在等你</div>
+          </div>
+          <div class="grp">12000009_替换网页图标</div>
+          <div class="item">
+            <div>查看会话内容不改代码</div>
+            <div class="sub">刚结束，还没看</div>
+          </div>
+          <div class="item">
+            <div>帮我看看代码有没有优化空间</div>
+            <div class="sub">刚结束，还没看</div>
+          </div>
+          <div class="grp">其他</div>
+          <div class="item">
+            <div>（没有工作区标签的会话）</div>
+            <div class="sub">刚结束，还没看</div>
+          </div>
+        </div>
+      </div>
+      <div style="max-width: 420px; color: var(--muted); font-size: 12px; padding-top: 6px">
+        <p style="margin:0 0 8px"><b style="color:var(--fg)">排序</b>：哪个工作区里"最急"的那条更急，哪个工作区排前面；工作区内"在等你"排在"刚结束"之前；同级按时间从新到旧。</p>
+        <p style="margin:0 0 8px"><b style="color:var(--fg)">点击</b>：点一条 → 跳到那个会话，同时它就算"处理过了"，红点相应减少。</p>
+        <p style="margin:0"><b style="color:var(--fg)">注意</b>：跳转不会自动展开侧栏里那个工作区分组（官方没给这个出口），所以清单里带上了工作区名。</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="pg">
+  这是静态模型，用来定样式；不连接 DSH、不影响任何正在跑的功能。
+</footer>
+
+<script>
+  const html = document.documentElement;
+  const buttons = document.querySelectorAll("[data-theme-btn]");
+  for (const button of buttons) {
+    button.addEventListener("click", () => {
+      html.dataset.theme = button.dataset.themeBtn;
+      for (const other of buttons) other.setAttribute("aria-pressed", String(other === button));
+    });
+  }
+</script>
+</body>
+</html>

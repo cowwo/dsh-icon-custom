@@ -45,6 +45,8 @@ jobs:
 
           - 在 设置 → icon管理 上传自定义浏览器标签页图标
           - 支持 SVG / PNG / ICO，立即生效并持久保存
+          - 未读红点：标签页图标 / 页面 Logo / 侧栏工作区与会话行
+          - 应用图标角标：安装为应用后，未读数字同时显示在系统图标上（Windows 任务栏；关掉窗口角标即消失，属预期）
           EOF
           gh release create ${GITHUB_REF_NAME} --title "${GITHUB_REF_NAME}" --notes-file release-notes.md
         env:
