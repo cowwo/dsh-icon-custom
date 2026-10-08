@@ -46,16 +46,21 @@ function harness({ stored = null } = {}) {
 	/** Counts the repaints the region asked for (the badge/dots/panel read our copy). */
 	const pokes = () => { pokes.calls++ }
 	pokes.calls = 0
+	/** Captures warnings: a failed push must be reported exactly once per streak. */
+	const warnings = []
+	const consoleStub = { warn: (...args) => warnings.push(args.map(String).join(' ')) }
 	const api = new Function(
-		'window', 'emitUnreadPoke',
+		'window', 'emitUnreadPoke', 'console',
 		region + '\nreturn { seenState, noteSeen, adoptHostSeen, flushHostSeen, scheduleHostSync, saveSeenState, setRpc: (r) => { seenRpc = r; }, flags: () => ({ hostDirty, hostSyncedOnce, hostSyncInFlight, timers: hostSyncTimer, retry: hostRetryTimer, backoff: hostBackoffUntil, pokes: emitUnreadPoke.calls }) };'
-	)(window, pokes)
+	)(window, pokes, consoleStub)
+	api.warnings = warnings
 	/** Every RPC call the region made, in order. */
 	const calls = []
 	api.setRpc({
 		call: (path, method, options) => {
 			const marks = options?.args?.marks ?? null
 			calls.push({ method, marks })
+			if (api.throwSync === true) throw new Error('carrier exploded')
 			const answer = api.answer
 			if (answer === null) return Promise.reject(new Error('offline'))
 			return Promise.resolve(typeof answer === 'function' ? answer(marks) : answer)
@@ -158,11 +163,13 @@ function harness({ stored = null } = {}) {
 	check(api.calls.length === 1, '尝试过一次')
 	check(api.seenState.seen.a === 100, '标记没有丢')
 	check(api.flags().retry !== 0, '排了重试')
+	check(api.warnings.length === 1, '失败必须说出来一次(静默失败最难查,实际 ' + api.warnings.length + ' 条)')
 	api.answer = { ok: true, value: { seen: { a: 100 } } }
 	api.runTimers()
 	await settle()
 	check(api.calls.length === 2, '重试真的发出去了')
 	check(api.flags().hostDirty === false, '成功后不再脏')
+	check(api.warnings.length === 1, '成功不追加告警')
 }
 
 // 6. 没有 RPC(测试环境/老宿主)时,一切都还是 no-op
@@ -198,6 +205,25 @@ function harness({ stored = null } = {}) {
 	api.noteSeen('session-z', 900)
 	api.saveSeenState()
 	check(api.timerCount() === 1, '退避清零后,新标记立刻能排推送')
+}
+
+// 8. 同步抛错的载体不许把在途闸门卡死
+{
+	console.log('8. rpc.call 同步抛错:不卡死、要告警、还能恢复')
+	const api = harness({ stored: { a: 100 } })
+	api.throwSync = true
+	api.scheduleHostSync()
+	api.runTimers()
+	await settle()
+	check(api.flags().hostSyncInFlight === false, '在途闸门被释放(否则页面余生再也不推)')
+	check(api.warnings.length === 1, '同步抛错也要说出来一次(实际 ' + api.warnings.length + ' 条)')
+	check(api.flags().retry !== 0, '排了重试')
+	api.throwSync = false
+	api.answer = { ok: true, value: { seen: { a: 100 } } }
+	api.runTimers()
+	await settle()
+	check(api.calls.length === 2 && api.flags().hostDirty === false, '恢复后真的推上去了')
+	check(api.warnings.length === 1, '恢复后不追加告警')
 }
 
 if (failed > 0) {

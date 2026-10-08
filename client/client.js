@@ -375,6 +375,8 @@ window.__ModuleLoader__.load({
 		let hostRetryDelay = HOST_SYNC_RETRY_MS;
 		/** No push is attempted before this moment (the backoff window). */
 		let hostBackoffUntil = 0;
+		/** Whether the current failure streak has been reported (warn once per streak). */
+		let hostSyncWarned = false;
 		/**
 		 * Push the local table soon, unless there is nothing to say.
 		 *
@@ -431,15 +433,30 @@ window.__ModuleLoader__.load({
 			if (!hostDirty && hostSyncedOnce) return;
 			hostSyncInFlight = true;
 			const marks = { ...seenState.seen };
-			Promise.resolve(seenRpc.call("/api", "iconCustom/setUnreadSeen", { args: { marks } }))
-				.then((resp) => {
+			let pending;
+			try {
+				pending = seenRpc.call("/api", "iconCustom/setUnreadSeen", { args: { marks } });
+			} catch (error) {
+				// A carrier that throws synchronously must not wedge the in-flight guard:
+				// that would stop every later push for the life of the page, silently.
+				hostSyncInFlight = false;
+				noteHostSyncFailure(error);
+				return;
+			}
+			Promise.resolve(pending).then(
+				(resp) => {
 					hostSyncInFlight = false;
-					if (resp === null || typeof resp !== "object" || resp.ok !== true) throw new Error("setUnreadSeen failed");
+					if (resp === null || typeof resp !== "object" || resp.ok !== true) {
+						const reason = resp !== null && typeof resp === "object" && resp.error !== undefined ? JSON.stringify(resp.error) : "resp.ok !== true";
+						noteHostSyncFailure(new Error("setUnreadSeen 被拒绝: " + reason));
+						return;
+					}
 					const value = resp.value !== null && typeof resp.value === "object" ? resp.value : {};
 					const gained = adoptHostSeen(value.seen);
 					hostSyncedOnce = true;
 					hostRetryDelay = HOST_SYNC_RETRY_MS;
 					hostBackoffUntil = 0;
+					hostSyncWarned = false;
 					// The Host knew marks this browser did not: keep them and push the union
 					// once more. The next answer cannot gain anything, so this terminates.
 					// Repaint too: the badge, the row dots and the panel all read this
@@ -447,15 +464,29 @@ window.__ModuleLoader__.load({
 					// arrived over the wire.
 					hostDirty = gained;
 					if (gained) { saveSeenState(); emitUnreadPoke(); scheduleHostSync(); }
-				})
-				.catch(() => {
-					hostSyncInFlight = false;
-					const wait = hostRetryDelay;
-					hostRetryDelay = Math.min(hostRetryDelay * 2, HOST_SYNC_MAX_RETRY_MS);
-					hostBackoffUntil = Date.now() + wait;
-					if (hostRetryTimer !== 0) window.clearTimeout(hostRetryTimer);
-					hostRetryTimer = window.setTimeout(() => { hostRetryTimer = 0; flushHostSeen(); }, wait);
-				});
+				},
+				(error) => { hostSyncInFlight = false; noteHostSyncFailure(error); }
+			);
+		}
+		/**
+		 * One failed push: report it once per streak, then back off and try again later.
+		 *
+		 * Reported (not swallowed) because a watermark that cannot reach the Host is a
+		 * silent, confusing failure — "为什么另一台设备还亮着" — and there is nothing on
+		 * screen to explain it. The badge itself keeps working from the local copy, so
+		 * this must never look fatal, and it warns once rather than on every retry.
+		 * @param error - whatever the carrier rejected with.
+		 */
+		function noteHostSyncFailure(error) {
+			if (!hostSyncWarned) {
+				hostSyncWarned = true;
+				try { console.warn("dsh-icon-custom: 已读水位线同步到宿主失败(红点仍照常工作,会自动重试):", (error && error.message) || error); } catch {}
+			}
+			const wait = hostRetryDelay;
+			hostRetryDelay = Math.min(hostRetryDelay * 2, HOST_SYNC_MAX_RETRY_MS);
+			hostBackoffUntil = Date.now() + wait;
+			if (hostRetryTimer !== 0) window.clearTimeout(hostRetryTimer);
+			hostRetryTimer = window.setTimeout(() => { hostRetryTimer = 0; flushHostSeen(); }, wait);
 		}
 		function saveSeenState() {
 			try {
