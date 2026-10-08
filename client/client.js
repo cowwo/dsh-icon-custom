@@ -80,7 +80,7 @@ window.__ModuleLoader__.load({
 			badgeTestHint: "真实未读 = 有会话发生了上面勾选的情况、而且你还没看过它(打开该会话即视为已读)。你正开着的会话也算——窗口可能被最小化、页面可能切到后台,这里无从判断你在不在看,所以不做这个区分。只有子代理不计。手动模式:自己填数字试看效果。刷新页面后回到真实未读。",
 			clearDelayLabel: "进入会话后多久算已读:",
 			clearDelayUnit: "秒",
-			clearDelayHint: "填 0 = 进去就算已读(红点立即消失)。大于 0 时,你要在那个会话里连续待满这么多秒它才算看过:中途切走会清零重数,刷新页面也重新数。**计时只认\"你进入会话时已经存在的结束\"**——你人已经在里面的时候又跑完一轮,那一轮不算数:它会一直亮着,等你切走再进来才会清。上限 600 秒。"
+			clearDelayHint: "填 0 = 进去就算已读(红点立即消失)。大于 0 时,你要在那个会话里连续待满这么多秒它才算看过:中途切走会清零重数,刷新页面也重新数。**计时只认\"你进入会话时已经存在的结束\"**——你人已经在里面的时候又跑完一轮,那一轮不算数:它会一直亮着,等你切走再进来才会清。上限 600 秒。已读记在宿主($DSH_HOME/custom-favicon/unread-seen.json):任何一台设备上看过,所有设备都不再提醒;浏览器那份只是缓存,清站点数据不会把已读丢回去。"
 		};
 		const en = {
 			nav: "Favicon",
@@ -153,7 +153,7 @@ window.__ModuleLoader__.load({
 			badgeTestHint: "Real unread = a session ended for one of the checked reasons and you have not looked at it yet (opening a session marks it read). The session you are viewing counts too — the window may be minimised or the page in the background, so this half cannot tell whether you are looking, and does not pretend to. Only sub-agents never count. Manual = type a number to preview. Resets to Real on reload.",
 			clearDelayLabel: "Mark read after staying:",
 			clearDelayUnit: "seconds",
-			clearDelayHint: "0 = read as soon as you enter (the dot clears at once). Above 0 you must stay in that session for this many seconds before it counts as read: leaving it resets the clock, and so does a reload. The clock only ever covers **the ending that was already there when you entered** — a turn that finishes while you are sitting in the session does not count: it stays red until you leave and come back. Capped at 600 seconds."
+			clearDelayHint: "0 = read as soon as you enter (the dot clears at once). Above 0 you must stay in that session for this many seconds before it counts as read: leaving it resets the clock, and so does a reload. The clock only ever covers **the ending that was already there when you entered** — a turn that finishes while you are sitting in the session does not count: it stays red until you leave and come back. Capped at 600 seconds. Read state lives on the Host ($DSH_HOME/custom-favicon/unread-seen.json): read on any device means read on every device, and the browser's own copy is only a cache — clearing site data no longer throws it away."
 		};
 		//#endregion
 
@@ -309,7 +309,7 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * The seen watermark lives in the HOST's clock domain.
+		 * The seen watermark: the HOST owns it, this browser keeps the working copy.
 		 *
 		 * A turn end arrives stamped with the Host's `turn/end.time`; a mark written
 		 * from the browser's `Date.now()` only lines up while both clocks agree. A
@@ -318,11 +318,26 @@ window.__ModuleLoader__.load({
 		 * all — the one failure users report as "点进去也不消". Marks now store the
 		 * `endAt` they acknowledge, and `lastActiveAt` stores a host-domain time, so
 		 * every comparison in `collectUnread` stays inside one clock.
+		 *
+		 * Since 0.11.2 the authoritative table lives in the Host
+		 * (`~/.dsh/custom-favicon/unread-seen.json`, merged max-per-session). This
+		 * copy is what the badge reads — so the page never waits for a round trip and
+		 * keeps working offline — and doubles as the pending queue: every local mark
+		 * is pushed back on the next sync, and a merge can only move marks forward.
+		 * That is what makes "looked at it" survive a cleared browser profile and mean
+		 * the same thing on every device.
 		 */
 		const SEEN_STORE_KEY = "dsh-icon-custom.unread-seen.v2";
 		/** 0.10.1 and earlier wrote browser timestamps here; migrated once. */
 		const LEGACY_SEEN_STORE_KEY = "dsh-icon-custom.unread-seen.v1";
+		/** Mirror of the Host's cap (see lib/unread.js). */
 		const SEEN_MAX = 400;
+		/** Coalescing window for watermark pushes: one small RPC per burst, not per session. */
+		const HOST_SYNC_DEBOUNCE_MS = 2000;
+		/** Retry gap after a failed push (offline, or a Host without the endpoint). */
+		const HOST_SYNC_RETRY_MS = 30000;
+		/** Ceiling for that retry gap: an old Host must not be probed forever every 20 s. */
+		const HOST_SYNC_MAX_RETRY_MS = 300000;
 		/** Host clock minus browser clock, from the last Host sample; null until known. */
 		let hostClockOffset = null;
 		/** This browser's clock expressed in the Host's domain (best effort). */
@@ -347,10 +362,103 @@ window.__ModuleLoader__.load({
 		const seenState = loadSeenState();
 		/** When this browser last had the app open before this page load (host domain). */
 		const seenBootAt = seenState.lastActiveAt > 0 ? seenState.lastActiveAt : 0;
+		/** The connection RPC, once `apply` has one; null keeps every push a no-op. */
+		let seenRpc = null;
+		/** Whether this page load has already converged with the Host once. */
+		let hostSyncedOnce = false;
+		/** Whether local marks changed since the last successful push. */
+		let hostDirty = false;
+		let hostSyncTimer = 0;
+		let hostRetryTimer = 0;
+		let hostSyncInFlight = false;
+		/** Escalating gap between failed pushes; any success resets it. */
+		let hostRetryDelay = HOST_SYNC_RETRY_MS;
+		/** No push is attempted before this moment (the backoff window). */
+		let hostBackoffUntil = 0;
+		/**
+		 * Push the local table soon, unless there is nothing to say.
+		 *
+		 * Called from `saveSeenState`, which is also the 20-second "this browser is
+		 * still here" touch: that touch must NOT count as a change, or the table would
+		 * travel every 20 seconds. `hostSyncedOnce` covers the first push of a page
+		 * load, which is also the migration (local-only marks going up) and the
+		 * self-heal (a lost Host file coming back from this browser).
+		 * @param delayMs - override the coalescing window; non-positive uses the default.
+		 */
+		function scheduleHostSync(delayMs) {
+			if (seenRpc === null || hostSyncInFlight) return;
+			if (!hostDirty && hostSyncedOnce) return;
+			if (hostSyncTimer !== 0) return;
+			// A failed push escalates its own retry; the 20-second touch must not keep
+			// poking a Host that has no such endpoint (an older DSH, or offline).
+			if (Date.now() < hostBackoffUntil) return;
+			const wait = typeof delayMs === "number" && delayMs > 0 ? delayMs : HOST_SYNC_DEBOUNCE_MS;
+			hostSyncTimer = window.setTimeout(() => { hostSyncTimer = 0; flushHostSeen(); }, wait);
+		}
+		/**
+		 * Adopt the Host's table: per session the NEWER of the two wins.
+		 *
+		 * Max-merge (never overwrite) is what makes both directions safe: the Host file
+		 * lost or truncated → this browser's copy wins; this browser's localStorage
+		 * cleared → the Host's copy wins. It is also the whole migration path.
+		 * @param seen - the Host's table (`id → endAt`), or anything.
+		 * @returns whether the local table gained anything.
+		 */
+		function adoptHostSeen(seen) {
+			if (seen === null || typeof seen !== "object") return false;
+			let gained = false;
+			for (const id of Object.keys(seen)) {
+				if (typeof id !== "string" || id === "") continue;
+				const at = seen[id];
+				if (typeof at !== "number" || !Number.isFinite(at) || at <= 0) continue;
+				const previous = seenState.seen[id];
+				if (typeof previous === "number" && previous >= at) continue;
+				seenState.seen[id] = at;
+				gained = true;
+			}
+			return gained;
+		}
+		/**
+		 * Send the whole local table and adopt the merged answer.
+		 *
+		 * Whole-table, not a delta: the payload is a few KB, the Host merges by max (so
+		 * a duplicate or partial round trip is harmless), and any lost message heals on
+		 * the next one. A failure keeps the marks here — they are already in
+		 * localStorage and the badge reads them — and retries later.
+		 */
+		function flushHostSeen() {
+			if (seenRpc === null || hostSyncInFlight) return;
+			if (!hostDirty && hostSyncedOnce) return;
+			hostSyncInFlight = true;
+			const marks = { ...seenState.seen };
+			Promise.resolve(seenRpc.call("/api", "iconCustom/setUnreadSeen", { args: { marks } }))
+				.then((resp) => {
+					hostSyncInFlight = false;
+					if (resp === null || typeof resp !== "object" || resp.ok !== true) throw new Error("setUnreadSeen failed");
+					const value = resp.value !== null && typeof resp.value === "object" ? resp.value : {};
+					const gained = adoptHostSeen(value.seen);
+					hostSyncedOnce = true;
+					hostRetryDelay = HOST_SYNC_RETRY_MS;
+					hostBackoffUntil = 0;
+					// The Host knew marks this browser did not: keep them and push the union
+					// once more. The next answer cannot gain anything, so this terminates.
+					hostDirty = gained;
+					if (gained) { saveSeenState(); scheduleHostSync(); }
+				})
+				.catch(() => {
+					hostSyncInFlight = false;
+					const wait = hostRetryDelay;
+					hostRetryDelay = Math.min(hostRetryDelay * 2, HOST_SYNC_MAX_RETRY_MS);
+					hostBackoffUntil = Date.now() + wait;
+					if (hostRetryTimer !== 0) window.clearTimeout(hostRetryTimer);
+					hostRetryTimer = window.setTimeout(() => { hostRetryTimer = 0; flushHostSeen(); }, wait);
+				});
+		}
 		function saveSeenState() {
 			try {
 				window.localStorage.setItem(SEEN_STORE_KEY, JSON.stringify({ domain: "host", lastActiveAt: seenState.lastActiveAt, seen: seenState.seen }));
 			} catch {}
+			scheduleHostSync();
 		}
 		/**
 		 * Learn the Host↔browser clock offset from a Host timestamp, and fold a
@@ -390,12 +498,20 @@ window.__ModuleLoader__.load({
 			const previous = seenState.seen[sessionId];
 			if (typeof previous === "number" && previous >= mark) return false;
 			seenState.seen[sessionId] = mark;
+			// Only a REAL mark counts as a change: the 20-second "still here" touch also
+			// lands in `saveSeenState`, and it must not drag the whole table to the Host.
+			hostDirty = true;
 			return true;
 		}
 		/**
 		 * First sight of a session is watermarked at the last time this browser was
 		 * here — so an ending that happened while the app was closed still counts as
 		 * unread, while endings from before the plugin was installed do not.
+		 *
+		 * Unchanged by the move to a Host-owned table: a session nobody has a mark for
+		 * still needs a starting value, and "the last time this browser was here" is
+		 * the honest one. A mark dropped by the Host's pruning simply re-baselines here
+		 * on the next load, which is why pruning cannot resurrect old dots.
 		 * @returns whether anything was learned (callers persist only then).
 		 */
 		function ensureSeenBaseline(ids) {
@@ -2460,6 +2576,10 @@ window.__ModuleLoader__.load({
 			ctx.effect(() => ctx.locale.register(NS, { zh, en }), "dsh-icon-custom: dictionaries");
 			const t = ctx.locale.bind(NS);
 			const rpc = ctx.connection.rpc;
+			// The watermark's Host half rides the same connection as every other RPC.
+			// Setting it here (not at module scope) is what keeps the store usable in a
+			// test harness with no connection: pushes stay no-ops, the badge still works.
+			seenRpc = rpc;
 			// Pull the host state once, so the brand mark and the badge are correct
 			// before the settings section is ever opened. The unread rule rides its
 			// own endpoint: the icon RPCs keep their pre-badge response shape.
@@ -2471,8 +2591,16 @@ window.__ModuleLoader__.load({
 					if (resp === null || typeof resp !== "object" || resp.ok !== true) return;
 					// The rule response carries the Host's clock; it is what puts the seen
 					// watermark (and a legacy browser-domain store) into the Host's domain.
-					if (resp.value !== null && typeof resp.value === "object") noteHostClock(resp.value.hostNow);
+					// It also carries the Host's watermark table, which merges in here —
+					// then the first push sends the union back, which is both the migration
+					// (marks this browser made before 0.11.2) and the self-heal (a Host file
+					// that was lost or pruned gets this browser's copy back).
+					if (resp.value !== null && typeof resp.value === "object") {
+						noteHostClock(resp.value.hostNow);
+						if (adoptHostSeen(resp.value.seen)) saveSeenState();
+					}
 					emitUnreadConfig(resp.value);
+					scheduleHostSync();
 				})
 				.catch(() => {});
 			// Keep "the last moment this browser was here" fresh, so an ending that
@@ -2495,10 +2623,13 @@ window.__ModuleLoader__.load({
 			// Re-sample the Host↔browser clock offset after a sleep/resume, which is the
 			// one moment the two can drift apart mid-page. Throttled: it is one small
 			// RPC per visible-again, and never on beforeunload (nothing would come back).
+			// Coming back into view is also the natural moment to retry a watermark push
+			// that failed while the machine was asleep.
 			ctx.effect(() => {
 				let sampledAt = 0;
 				const sample = () => {
 					if (document.visibilityState === "hidden") return;
+					scheduleHostSync();
 					if (Date.now() - sampledAt < 60000) return;
 					sampledAt = Date.now();
 					rpc.call("/api", "iconCustom/getUnreadRule", { args: {} })

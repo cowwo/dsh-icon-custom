@@ -88,6 +88,8 @@ The uploaded file is stored verbatim (never re‑encoded) so the favicon keeps i
 
 Icons are stored per‑user under `$DSH_HOME/custom-favicon/`. "Reset" only clears the active marker; stored files are kept for a future icon‑library UI.
 
+That directory also holds two JSON files: `unread.json` (which turn-end reasons count as unread) and `unread-seen.json` (the seen watermark, `{ version, seen: { sessionId → endAt } }`, capped at 400 entries and written temp-then-rename). Both are **disposable**: deleting the first restores the default rule, deleting the second makes each browser re-baseline at "the last time it was open" (which does not resurrect old dots). The watermark is host-owned on purpose — looked at on any device means read on every device — while each browser keeps its own copy as a cache and offline queue.
+
 ## License
 
 MIT

@@ -6,7 +6,7 @@
   "main": "lib/index.js",
   "license": "MIT",
   "scripts": {
-    "test": "node test/app-badge.mjs && node test/unread-panel.mjs && node test/unread-clear.mjs && node test/unread-rows.mjs"
+    "test": "node test/app-badge.mjs && node test/unread-panel.mjs && node test/unread-clear.mjs && node test/unread-rows.mjs && node test/unread-seen.mjs && node test/unread-host-sync.mjs"
   },
   "dependencies": {
     "jimp": "^1.6.1",
