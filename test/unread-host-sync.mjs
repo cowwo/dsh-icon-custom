@@ -8,10 +8,24 @@
 //   * 宿主知道得更多时,再推一次直到收敛,不会无限循环。
 // 跑法:在仓库根目录 `node test/unread-host-sync.mjs`(从 client/client.js 切真实代码,
 // 只桩 window/localStorage/RPC)。
+//
+// 假 RPC 会拿 **真的 typert 清单**校验 args 形状:网关只认描述符里的参数名,`{ marks }`
+// 这种扁平写法会被 `gateway/arguments-invalid` 拒掉(曾经真的发生过)。这样以后再加端点,
+// 形状写错会在这里立刻炸,而不是等到浏览器控制台。
 
 import { readFileSync } from 'node:fs'
+import { TYPERT } from '../lib/typert.host.js'
 
 const src = readFileSync('client/client.js', 'utf8')
+
+/** Parameter names the gateway requires for one endpoint, from the real manifest. */
+function declaredParams(endpoint) {
+	// The client calls "iconCustom/setUnreadSeen"; the manifest keys it by method name.
+	const method = String(endpoint).split('/').pop()
+	const invocation = TYPERT.invocations.find((entry) => entry.method === method)
+	if (invocation === undefined) throw new Error('清单里没有这个端点: ' + endpoint)
+	return invocation.parameters.map((parameter) => parameter.name)
+}
 
 let failed = 0
 function check(ok, what) {
@@ -54,13 +68,29 @@ function harness({ stored = null } = {}) {
 		region + '\nreturn { seenState, noteSeen, adoptHostSeen, flushHostSeen, scheduleHostSync, saveSeenState, setRpc: (r) => { seenRpc = r; }, flags: () => ({ hostDirty, hostSyncedOnce, hostSyncInFlight, timers: hostSyncTimer, retry: hostRetryTimer, backoff: hostBackoffUntil, pokes: emitUnreadPoke.calls }) };'
 	)(window, pokes, consoleStub)
 	api.warnings = warnings
-	/** Every RPC call the region made, in order. */
+	/** Every RPC call the region made, in order; `wireOk` mirrors the gateway's own check. */
 	const calls = []
 	api.setRpc({
 		call: (path, method, options) => {
-			const marks = options?.args?.marks ?? null
-			calls.push({ method, marks })
+			const args = options?.args ?? {}
+			const declared = declaredParams(method)
+			const got = Object.keys(args)
+			const missing = declared.filter((name) => !got.includes(name))
+			const extra = got.filter((name) => !declared.includes(name))
+			const wireOk = missing.length === 0 && extra.length === 0
+			const marks = wireOk && declared.length > 0 ? args[declared[0]]?.marks ?? null : null
+			calls.push({ method, marks, wireOk, missing, extra })
 			if (api.throwSync === true) throw new Error('carrier exploded')
+			// Same rejection the gateway produces for a shape mismatch.
+			if (!wireOk) {
+				return Promise.resolve({
+					ok: false,
+					error: {
+						code: 'gateway/arguments-invalid',
+						message: 'args fields do not match the descriptor: missing ' + JSON.stringify(missing) + '; unexpected ' + JSON.stringify(extra)
+					}
+				})
+			}
 			const answer = api.answer
 			if (answer === null) return Promise.reject(new Error('offline'))
 			return Promise.resolve(typeof answer === 'function' ? answer(marks) : answer)
@@ -104,13 +134,13 @@ function harness({ stored = null } = {}) {
 	await settle()
 	check(api.calls.length === 1, '第一次推送发生(实际 ' + api.calls.length + ' 次)')
 	check(api.calls[0].method === 'iconCustom/setUnreadSeen', '推的是 setUnreadSeen 端点')
-	check(api.calls[0].marks.mine === 500, '把自己那份推了上去(迁移)')
+	check(api.calls[0].marks !== null && api.calls[0].marks.mine === 500, '把自己那份推了上去(迁移)')
 	check(api.seenState.seen.theirs === 900, '采纳了宿主知道的标记(自愈的另一半)')
 	check(api.flags().pokes === 1, '采纳后要求重绘(否则红点要等下次渲染才消失,实际 ' + api.flags().pokes + ' 次)')
 	check(api.flags().hostDirty === true, '宿主知道得更多 → 标记为还要再推一次')
 	api.runTimers()
 	await settle()
-	check(api.calls.length === 2 && api.calls[1].marks.theirs === 900, '第二次推的是并集')
+	check(api.calls.length === 2 && api.calls[1].marks !== null && api.calls[1].marks.theirs === 900, '第二次推的是并集')
 	check(api.flags().hostDirty === false, '没有新的前进 → 收敛,不再推')
 	const extra = api.runTimers()
 	check(extra === 0, '收敛后没有多余定时器')
@@ -147,7 +177,7 @@ function harness({ stored = null } = {}) {
 	check(api.flags().hostDirty === true, '标记为脏')
 	api.runTimers()
 	await settle()
-	check(api.calls.length === before + 1 && api.calls[before].marks['session-x'] === 777, '把新标记推给了宿主')
+	check(api.calls.length === before + 1 && api.calls[before].marks !== null && api.calls[before].marks['session-x'] === 777, '把新标记推给了宿主')
 	const again = api.noteSeen('session-x', 700)
 	check(again === false, '更旧的标记不算前进')
 }
@@ -224,6 +254,24 @@ function harness({ stored = null } = {}) {
 	await settle()
 	check(api.calls.length === 2 && api.flags().hostDirty === false, '恢复后真的推上去了')
 	check(api.warnings.length === 1, '恢复后不追加告警')
+}
+
+// 9. args 形状必须符合真清单(网关就是这么查的,写错只会在浏览器控制台里炸)
+{
+	console.log('9. args 形状按真清单校验')
+	const declared = declaredParams('setUnreadSeen')
+	check(declared.join(',') === 'request', '清单里 setUnreadSeen 的参数名是 request')
+	const api = harness({ stored: { a: 100 } })
+	api.answer = { ok: true, value: { seen: { a: 100 } } }
+	api.scheduleHostSync()
+	api.runTimers()
+	await settle()
+	check(api.calls.length === 1 && api.calls[0].wireOk === true, '推送用的是 { request: { marks } }')
+	check(api.calls[0].marks !== null && api.calls[0].marks.a === 100, '载荷能从描述符那个参数里取到 marks')
+	// 反证:扁平写法就是那次线上故障的形状,必须被判为不符。
+	const flat = { args: { marks: { a: 1 } } }
+	const got = Object.keys(flat.args)
+	check(declared.some((name) => !got.includes(name)) && got.some((name) => !declared.includes(name)), '扁平的 { marks } 会被判为形状不符')
 }
 
 if (failed > 0) {

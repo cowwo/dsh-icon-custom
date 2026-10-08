@@ -435,7 +435,10 @@ window.__ModuleLoader__.load({
 			const marks = { ...seenState.seen };
 			let pending;
 			try {
-				pending = seenRpc.call("/api", "iconCustom/setUnreadSeen", { args: { marks } });
+				// Args are nested under the descriptor's parameter name ("request"), which
+				// is what the gateway checks: a flat `{ marks }` is rejected with
+				// `gateway/arguments-invalid` before the method ever runs.
+				pending = seenRpc.call("/api", "iconCustom/setUnreadSeen", { args: { request: { marks } } });
 			} catch (error) {
 				// A carrier that throws synchronously must not wedge the in-flight guard:
 				// that would stop every later push for the life of the page, silently.
