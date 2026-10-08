@@ -442,8 +442,11 @@ window.__ModuleLoader__.load({
 					hostBackoffUntil = 0;
 					// The Host knew marks this browser did not: keep them and push the union
 					// once more. The next answer cannot gain anything, so this terminates.
+					// Repaint too: the badge, the row dots and the panel all read this
+					// browser's copy, and nothing else would re-render for a mark that
+					// arrived over the wire.
 					hostDirty = gained;
-					if (gained) { saveSeenState(); scheduleHostSync(); }
+					if (gained) { saveSeenState(); emitUnreadPoke(); scheduleHostSync(); }
 				})
 				.catch(() => {
 					hostSyncInFlight = false;
@@ -2623,8 +2626,10 @@ window.__ModuleLoader__.load({
 			// Re-sample the Host↔browser clock offset after a sleep/resume, which is the
 			// one moment the two can drift apart mid-page. Throttled: it is one small
 			// RPC per visible-again, and never on beforeunload (nothing would come back).
-			// Coming back into view is also the natural moment to retry a watermark push
-			// that failed while the machine was asleep.
+			// The same response carries the Host's watermark, so this is also how a
+			// SECOND device learns that something was read elsewhere — a page that is
+			// simply left open converges within a minute without a reload. Coming back
+			// into view is also the natural moment to retry a failed push.
 			ctx.effect(() => {
 				let sampledAt = 0;
 				const sample = () => {
@@ -2633,11 +2638,21 @@ window.__ModuleLoader__.load({
 					if (Date.now() - sampledAt < 60000) return;
 					sampledAt = Date.now();
 					rpc.call("/api", "iconCustom/getUnreadRule", { args: {} })
-						.then((resp) => { if (resp && resp.ok === true && resp.value !== null && typeof resp.value === "object") noteHostClock(resp.value.hostNow); })
+						.then((resp) => {
+							if (resp === null || typeof resp !== "object" || resp.ok !== true) return;
+							const value = resp.value !== null && typeof resp.value === "object" ? resp.value : null;
+							if (value === null) return;
+							noteHostClock(value.hostNow);
+							if (adoptHostSeen(value.seen)) { saveSeenState(); emitUnreadPoke(); }
+						})
 						.catch(() => {});
 				};
 				window.addEventListener("visibilitychange", sample);
-				return () => window.removeEventListener("visibilitychange", sample);
+				const interval = window.setInterval(sample, 60000);
+				return () => {
+					window.removeEventListener("visibilitychange", sample);
+					window.clearInterval(interval);
+				};
 			}, "dsh-icon-custom: host clock sample");
 			// Brand-mark seat: replaces only the whale mark (verified: a
 			// third-party registration wins over the official occupant and the

@@ -43,10 +43,13 @@ function harness({ stored = null } = {}) {
 		setTimeout: (fn, ms) => { const id = nextTimer++; timers.set(id, { fn, ms }); return id },
 		clearTimeout: (id) => { timers.delete(id) }
 	}
+	/** Counts the repaints the region asked for (the badge/dots/panel read our copy). */
+	const pokes = () => { pokes.calls++ }
+	pokes.calls = 0
 	const api = new Function(
-		'window',
-		region + '\nreturn { seenState, noteSeen, adoptHostSeen, flushHostSeen, scheduleHostSync, saveSeenState, setRpc: (r) => { seenRpc = r; }, flags: () => ({ hostDirty, hostSyncedOnce, hostSyncInFlight, timers: hostSyncTimer, retry: hostRetryTimer, backoff: hostBackoffUntil }) };'
-	)(window)
+		'window', 'emitUnreadPoke',
+		region + '\nreturn { seenState, noteSeen, adoptHostSeen, flushHostSeen, scheduleHostSync, saveSeenState, setRpc: (r) => { seenRpc = r; }, flags: () => ({ hostDirty, hostSyncedOnce, hostSyncInFlight, timers: hostSyncTimer, retry: hostRetryTimer, backoff: hostBackoffUntil, pokes: emitUnreadPoke.calls }) };'
+	)(window, pokes)
 	/** Every RPC call the region made, in order. */
 	const calls = []
 	api.setRpc({
@@ -98,6 +101,7 @@ function harness({ stored = null } = {}) {
 	check(api.calls[0].method === 'iconCustom/setUnreadSeen', '推的是 setUnreadSeen 端点')
 	check(api.calls[0].marks.mine === 500, '把自己那份推了上去(迁移)')
 	check(api.seenState.seen.theirs === 900, '采纳了宿主知道的标记(自愈的另一半)')
+	check(api.flags().pokes === 1, '采纳后要求重绘(否则红点要等下次渲染才消失,实际 ' + api.flags().pokes + ' 次)')
 	check(api.flags().hostDirty === true, '宿主知道得更多 → 标记为还要再推一次')
 	api.runTimers()
 	await settle()
