@@ -69,7 +69,7 @@ window.__ModuleLoader__.load({
 			ageMonths: "{n}个月",
 			ageYears: "{n}年",
 			workspaceDotLabel: "在工作区和会话行上显示红点(实验)",
-			workspaceDotHint: "在侧栏工作区那一行的文件夹图标上点一个小红点。这一项是贴着页面结构做的,DSH 升级后可能失效;失效时只会变成\"不显示\",不会影响红点数字、清单、跳转这些功能,随时可以关掉它。",
+			workspaceDotHint: "在侧栏工作区那一行的文件夹图标上点一个小红点(收起的工作区里有多少未读,就看它),有未读的会话在其标题右边也跟一个小红点。会话行上的点只在那一行真的显示着时才画:折叠起来的会话由工作区那一行的点和「待处理」清单代表。这一项是贴着页面结构做的,DSH 升级后可能失效;失效时只会变成\"不显示\",不会影响红点数字、清单、跳转这些功能,随时可以关掉它。",
 			appBadgeLabel: "在系统应用图标上显示红点",
 			appBadgeHint: "安装为应用后,把同一个数字也放到系统图标上:Windows 是任务栏图标上的角标,macOS 是 Dock 角标,iOS 是主屏图标上的数字。样子由系统决定——Windows 上 Chrome 画深色圆+白字,Edge 走 Windows 系统徽章通道(是否显示数字由 Edge/Windows 决定);插件会周期重设数字,但只在应用窗口开着时更新。",
 			appBadgeFootnote: "角标只在应用窗口开着时由本插件更新;数字超过 99 时由系统显示为 99+。",
@@ -142,7 +142,7 @@ window.__ModuleLoader__.load({
 			ageMonths: "{n}mo",
 			ageYears: "{n}y",
 			workspaceDotLabel: "Dots on workspace and session rows (experimental)",
-			workspaceDotHint: "Adds a small red dot to the folder icon of each workspace row. This one reads the page structure, so a DSH upgrade may break it; when it does it simply stops showing, never affecting the counts, the list, or navigation. Turn it off any time.",
+			workspaceDotHint: "Adds a small red dot to the folder icon of each workspace row (a collapsed workspace shows how many of its sessions are unread there), and one beside the title of every unread session row. A session dot is only drawn while that row is really rendered: folded sessions are represented by their workspace row's dot and the pending panel. This one reads the page structure, so a DSH upgrade may break it; when it does it simply stops showing, never affecting the counts, the list, or navigation. Turn it off any time.",
 			appBadgeLabel: "Badge the system app icon",
 			appBadgeHint: "Once installed as an app, the same number also goes to the system icon: a taskbar badge on Windows, a Dock badge on macOS, a number on the iOS home-screen icon. The system decides how it looks — on Windows, Chrome draws a dark circle with white text, while Edge goes through the Windows badge channel (whether it shows the number is up to Edge/Windows). The plugin re-asserts the number periodically, but only while the app window is open.",
 			appBadgeFootnote: "The badge is only updated by this plugin while the app window is open; above 99 the system shows 99+.",
@@ -1004,22 +1004,32 @@ window.__ModuleLoader__.load({
 		/**
 		 * Roll the pending sessions up to one dot per workspace.
 		 *
-		 * Pure: `titles` maps sessionId → the workspace title the sidebar shows
-		 * (assembled from the official workspace snapshot); a session missing from it
-		 * falls back to the cwd basename `collectUnread` already carries.
-		 * @returns `[{ name, count }]`, busiest workspace first.
+		 * Pure: `owners` maps sessionId → `{ id, title }` from the official workspace
+		 * snapshot. Both halves matter downstream: the ID anchors the marker to the
+		 * row the browser itself keys (`data-row-key="workspace:<id>"`), which is what
+		 * makes the folder dot survive a Workspace whose displayed name differs from
+		 * the stored title, two Workspaces sharing one title, and a title that is
+		 * simply empty. The title stays for the tooltip; a session with neither falls
+		 * back to the cwd basename `collectUnread` already carries.
+		 * @returns `[{ id, name, count }]`, busiest workspace first.
 		 */
-		function dotsFromItems(items, titles) {
+		function dotsFromItems(items, owners) {
 			const counts = new Map();
 			for (const item of Array.isArray(items) ? items : []) {
 				if (item === null || typeof item !== "object") continue;
-				const mapped = titles !== null && typeof titles === "object" ? titles[item.id] : undefined;
-				const name = typeof mapped === "string" && mapped !== "" ? mapped : (typeof item.where === "string" ? item.where : "");
+				const owner = owners !== null && typeof owners === "object" ? owners[item.id] : undefined;
+				const title = owner !== null && typeof owner === "object" && typeof owner.title === "string" ? owner.title : "";
+				const name = title !== "" ? title : (typeof item.where === "string" ? item.where : "");
 				if (name === "") continue;
-				counts.set(name, (counts.get(name) || 0) + 1);
+				const id = owner !== null && typeof owner === "object" && typeof owner.id === "string" ? owner.id : "";
+				// One dot per Workspace: two Sessions of the same Workspace must not
+				// produce two entries that later paint on top of each other.
+				const key = id !== "" ? id : name;
+				const existing = counts.get(key);
+				if (existing === undefined) counts.set(key, { id, name, count: 1 });
+				else existing.count++;
 			}
-			return [...counts.entries()]
-				.map(([name, count]) => ({ name, count }))
+			return [...counts.values()]
 				.sort((a, b) => b.count - a.count || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 		}
 
@@ -1289,16 +1299,100 @@ window.__ModuleLoader__.load({
 		 * Where one session's marker goes: the tight title holder INSIDE that
 		 * session's own row. The row is found by `data-row-key`; the title inside it
 		 * is still matched by text, because that is the element the marker hangs off.
-		 * Falls back to the old whole-region title match on a build without row keys.
+		 *
+		 * A Session whose row is NOT in the DOM — folded behind "Show more", inside a
+		 * collapsed Workspace, or filtered out — gets NO marker. It used to fall back
+		 * to a whole-region title match, and that guess is exactly what puts a dot on
+		 * the wrong row: a DIFFERENT Session with the same title owns the only
+		 * rendered text node of that name, so the folded one's marker landed on the
+		 * visible one's row (two markers on one row, none on the real one). The
+		 * Workspace folder dot and the pending panel already speak for Sessions whose
+		 * rows are not rendered, so skipping loses no information.
+		 *
+		 * `legacyTitleMatch` is reserved for a build that stamps no row keys at all,
+		 * where the title is the only handle that exists.
+		 * @param legacyTitleMatch - whether this build predates `data-row-key`.
 		 * @returns `{ title, row }`, or null when this row cannot be trusted.
 		 */
-		function sessionRowTarget(container, id, title) {
+		function sessionRowTarget(container, id, title, legacyTitleMatch) {
 			const row = sessionRowElement(container, id);
 			if (row !== null) {
 				const inside = labelElementFor(row, title);
 				return inside === null ? null : titleTargetFor(inside, title);
 			}
+			if (legacyTitleMatch !== true) return null;
 			return titleTargetFor(labelElementFor(container, title), title);
+		}
+		/**
+		 * Whether the shipped browser stamps Session rows with `data-row-key`.
+		 *
+		 * Asked once per paint, not once per row: the strict path is only relaxed for
+		 * a build that has no row keys anywhere, never for one unlucky lookup.
+		 * @param container - the browsing region root (non-null).
+		 * @returns true when row keys are in use (and on any probe failure — the
+		 * strict path is the safe default).
+		 */
+		function sessionRowKeysInUse(container) {
+			try { return container.querySelector('[data-row-key^="session:"]') !== null; } catch { return true; }
+		}
+		/**
+		 * The DOM row of one Workspace, by the official row key, or null.
+		 *
+		 * Same handle as `sessionRowElement`, and the reason the folder dot no longer
+		 * depends on the displayed name: DSH renders a Workspace still carrying its
+		 * automatic title under a localized default name, and two Workspaces can share
+		 * one title, so a text match can miss or collide.
+		 * @param container - the browsing region root.
+		 * @param id - the Workspace id.
+		 * @returns the row element, or null.
+		 */
+		function workspaceRowElement(container, id) {
+			if (typeof id !== "string" || id === "") return null;
+			try { return container.querySelector(`[data-row-key="workspace:${id}"]`); } catch { return null; }
+		}
+		/**
+		 * The row box + folder icon a Workspace marker hangs off, from the keyed row.
+		 *
+		 * The key normally sits on the row itself; a build that stamps it on a group
+		 * wrapper fails the row-size check, so a bounded set of that wrapper's own rows
+		 * gets the same test before giving up. Either way the marker must land on a
+		 * row-sized box whose LEADING glyph is the folder — requiring a left-hand icon
+		 * is what keeps the dot off the end of the text.
+		 * @returns `{ row, icon }`, or null when this row cannot be trusted.
+		 */
+		function folderTargetFor(row) {
+			if (row === null || row === undefined) return null;
+			const candidates = [row];
+			try {
+				const inner = row.querySelectorAll("div");
+				for (let i = 0; i < inner.length && candidates.length < 12; i++) candidates.push(inner[i]);
+			} catch { /* the keyed element alone is still worth testing */ }
+			for (const candidate of candidates) {
+				const rect = candidate.getBoundingClientRect();
+				if (rect.height < WS_ROW_MIN_H || rect.height > WS_ROW_MAX_H || rect.width < WS_ROW_MIN_W) continue;
+				const icons = candidate.querySelectorAll("svg");
+				for (const icon of icons) {
+					const iconRect = icon.getBoundingClientRect();
+					if (iconRect.width <= 0 || iconRect.height <= 0) continue;
+					if (iconRect.left - rect.left > rect.width / 3) continue;
+					return { row: candidate, icon };
+				}
+			}
+			return null;
+		}
+		/**
+		 * The stable key a Workspace marker is stored under: its ID when known.
+		 *
+		 * The attribute value used to be the displayed title, which two Workspaces can
+		 * share — the reconcile pass would then treat one of them as a stranger and
+		 * remove a marker that is still wanted.
+		 * @param entry - one `{ id, name }` entry from `dotsFromItems`.
+		 * @returns the key, or undefined when the entry carries neither.
+		 */
+		function workspaceDotKey(entry) {
+			if (entry === null || typeof entry !== "object") return undefined;
+			if (typeof entry.id === "string" && entry.id !== "") return entry.id;
+			return entry.name;
 		}
 		function paintWorkspaceDots() {
 			if (workspaceDotGivenUp) return;
@@ -1315,7 +1409,7 @@ window.__ModuleLoader__.load({
 				// Reconcile, never wipe-and-redraw: a marker that is already correct is
 				// left untouched, so one unlucky lookup (a re-render in flight, a name
 				// matched twice for a moment) can no longer blink an existing dot away.
-				const wantedNames = new Set(wanted.map((entry) => entry.name));
+				const wantedNames = new Set(wanted.map((entry) => workspaceDotKey(entry)));
 				const wantedIds = new Set(wantedRows.map((entry) => entry.id));
 				document.querySelectorAll("[" + WS_DOT_ATTR + "]").forEach((node) => {
 					if (!node.isConnected || !wantedNames.has(node.getAttribute(WS_DOT_ATTR))) node.remove();
@@ -1324,12 +1418,21 @@ window.__ModuleLoader__.load({
 					if (!node.isConnected || !wantedIds.has(node.getAttribute(ROW_DOT_ATTR))) node.remove();
 				});
 				if (container === null) { workspaceDotPainting = false; return; } // start-up race
+				const legacyTitleMatch = !sessionRowKeysInUse(container);
 				for (const entry of wanted) {
-					const label = labelElementFor(container, entry.name);
-					const target = label === null ? null : markerTargetFor(label);
+					const key = workspaceDotKey(entry);
+					if (key === undefined) { missed++; continue; }
+					// The browser's own row key first; the title walk-up is only for a build
+					// that stamps no Workspace keys (or an entry the snapshot could not name).
+					const keyedRow = workspaceRowElement(container, entry.id);
+					let target = keyedRow === null ? null : folderTargetFor(keyedRow);
+					if (target === null && keyedRow === null) {
+						const label = labelElementFor(container, entry.name);
+						target = label === null ? null : markerTargetFor(label);
+					}
 					if (target === null) { missed++; continue; }
 					const row = target.row;
-					if (existingMarker(row, WS_DOT_ATTR, entry.name) !== null) { placed++; continue; }
+					if (existingMarker(row, WS_DOT_ATTR, key) !== null) { placed++; continue; }
 					const icon = target.icon;
 					const rowRect = row.getBoundingClientRect();
 					const anchorRect = icon.getBoundingClientRect();
@@ -1338,9 +1441,9 @@ window.__ModuleLoader__.load({
 						row.style.position = "relative";
 					}
 					const dot = document.createElement("span");
-					dot.setAttribute(WS_DOT_ATTR, entry.name);
+					dot.setAttribute(WS_DOT_ATTR, key);
 					dot.setAttribute("aria-hidden", "true");
-					dot.title = entry.name + " · " + entry.count;
+					dot.title = (typeof entry.name === "string" && entry.name !== "" ? entry.name : key) + " · " + entry.count;
 					dot.style.cssText = "position:absolute;pointer-events:none;width:8px;height:8px;border-radius:50%;"
 						+ "background:#e5484d;box-shadow:0 0 0 1.5px var(--dsw-alias-bg-layer-1,#fff);"
 						+ "left:" + Math.round(anchorRect.right - rowRect.left - 4) + "px;"
@@ -1352,7 +1455,7 @@ window.__ModuleLoader__.load({
 				// Session rows: the marker rides inline right after the title, so it stays
 				// beside the name whatever the timestamp happens to say.
 				for (const entry of wantedRows) {
-					const target = sessionRowTarget(container, entry.id, entry.title);
+					const target = sessionRowTarget(container, entry.id, entry.title, legacyTitleMatch);
 					if (target === null) { missed++; continue; }
 					if (existingMarker(target.row, ROW_DOT_ATTR, entry.id) !== null) { placed++; continue; }
 					const dot = document.createElement("span");
@@ -1505,19 +1608,21 @@ window.__ModuleLoader__.load({
 				};
 			}, [staySignature, delayMs]);
 			React.useEffect(() => { emitRealBadge(count, items); }, [count, items]);
-			// The workspace rows are labelled with the workspace TITLE, which is not
-			// always the cwd basename, so map session → title from the official snapshot.
+			// Map session → its Workspace from the official snapshot: the ID anchors the
+			// folder dot to the keyed row, the title is what the row displays (not always
+			// the cwd basename, and not always equal to the stored title either).
 			React.useEffect(() => {
-				const titles = {};
+				const owners = {};
 				const list = workspaces !== null && typeof workspaces === "object" && Array.isArray(workspaces.items) ? workspaces.items : [];
 				for (const workspace of list) {
 					if (workspace === null || typeof workspace !== "object") continue;
+					if (!Array.isArray(workspace.sessionIds)) continue;
+					const id = typeof workspace.workspaceId === "string" ? workspace.workspaceId : "";
 					const title = typeof workspace.title === "string" ? workspace.title : "";
-					if (title === "" || !Array.isArray(workspace.sessionIds)) continue;
-					for (const id of workspace.sessionIds) titles[id] = title;
+					for (const sessionId of workspace.sessionIds) owners[sessionId] = { id, title };
 				}
 				emitSidebarMarks({
-					workspaces: dotsFromItems(items, titles),
+					workspaces: dotsFromItems(items, owners),
 					sessions: items.map((item) => ({ id: item.id, title: item.title }))
 				});
 			}, [items, workspaces]);
