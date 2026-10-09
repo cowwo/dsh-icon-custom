@@ -1120,13 +1120,43 @@ window.__ModuleLoader__.load({
 				// Never silent: a failure here is invisible in the UI (the tab simply
 				// keeps its previous icon), which once cost a whole debugging session.
 				// Warn once per distinct reason so the 5s watchdog cannot spam.
-				const why = String((error && error.message) || error);
-				if (why !== lastComposeError) {
-					lastComposeError = why;
-					try { console.warn("dsh-icon-custom: 标签页红点合成失败 / favicon badge compose failed:", why); } catch {}
-				}
+				warnFaviconCompose(error);
 			} finally {
 				if (seq === composeSeq) faviconComposing = false;
+			}
+		}
+		/**
+		 * Report a failed tab-icon composition, once per distinct reason.
+		 *
+		 * The 5-second watchdog retries, so repeating the same line would bury the
+		 * console in noise; a NEW reason is exactly the signal worth seeing.
+		 * @param error - whatever the compose threw.
+		 */
+		function warnFaviconCompose(error) {
+			const why = String((error && error.message) || error);
+			if (why === lastComposeError) return;
+			lastComposeError = why;
+			try { console.warn("dsh-icon-custom: 标签页红点合成失败 / favicon badge compose failed:", why); } catch {}
+		}
+		/**
+		 * Fire-and-forget composition whose failures are still reported.
+		 *
+		 * `applyBadgeToFavicon` is async, so it never throws synchronously: a caller's
+		 * `try { ... } catch {}` (the badge listeners all have one) cannot see its
+		 * rejection, and the tab icon would simply never change with nothing in the
+		 * console — the exact "no warning, no badge" state. Every call site goes through
+		 * here instead.
+		 * @param count - sessions needing you; 0 restores the plain icon.
+		 * @param size - badge size key.
+		 */
+		function composeFavicon(count, size) {
+			try {
+				Promise.resolve(applyBadgeToFavicon(count, size)).catch(warnFaviconCompose);
+			} catch (error) {
+				// An `async` callee never throws synchronously, so this arm is dead TODAY —
+				// it is here so a future refactor (an early-returning sync path) cannot
+				// quietly reintroduce the silent "no warning, no badge" state.
+				warnFaviconCompose(error);
 			}
 		}
 		/**
@@ -1145,17 +1175,17 @@ window.__ModuleLoader__.load({
 				// Carries the custom icon, or puts the shipped pair back. Both writers
 				// only touch a link that actually differs, so this stays a no-op once
 				// the page is correct and cannot re-arm the head observer.
-				applyBadgeToFavicon(0);
+				composeFavicon(0);
 				return;
 			}
 			if (ours || faviconComposing) return; // already showing, or a build is running
-			applyBadgeToFavicon(effectiveCount(), badgeSize);
+			composeFavicon(effectiveCount(), badgeSize);
 		}
 		// A freshly applied base icon replaces whatever the browser holds, so the
 		// composite must be rebuilt from the NEW base instead of the stale one.
 		function refreshFaviconBase() {
 			faviconBase = null;
-			applyBadgeToFavicon(effectiveCount(), badgeSize);
+			composeFavicon(effectiveCount(), badgeSize);
 		}
 		//#endregion
 
@@ -2794,15 +2824,15 @@ window.__ModuleLoader__.load({
 			// this effect keeps the tab icon in sync. Teardown restores the
 			// pristine platform/custom icon.
 			ctx.effect(() => {
-				const unsubscribe = subscribeBadge((snapshot) => { applyBadgeToFavicon(snapshot.count, snapshot.size); });
+				const unsubscribe = subscribeBadge((snapshot) => { composeFavicon(snapshot.count, snapshot.size); });
 				// Level-triggered on purpose: (re)applying this half must adopt the
 				// value that is already on the bridge. The brand mark reads it at
 				// mount; the tab icon has to be told, or a plugin hot-reload would
 				// leave it restored (the old effect's cleanup) until the next change.
-				applyBadgeToFavicon(effectiveCount(), badgeSize);
+				composeFavicon(effectiveCount(), badgeSize);
 				return () => {
 					unsubscribe();
-					applyBadgeToFavicon(0);
+					composeFavicon(0);
 				};
 			}, "dsh-icon-custom: favicon badge");
 			// Watchdog. The tab icon is the one surface other parties can disturb
@@ -2879,7 +2909,7 @@ window.__ModuleLoader__.load({
 			}, "dsh-icon-custom: workspace dots");
 			// The platform favicon.svg repaints itself for dark mode through
 			// prefers-color-scheme; a composited bitmap cannot, so rebuild it.
-			ctx.on("theme/change", () => { applyBadgeToFavicon(effectiveCount(), badgeSize); });
+			ctx.on("theme/change", () => { composeFavicon(effectiveCount(), badgeSize); });
 		}
 		exports.apply = apply;
 		exports.inject = inject;

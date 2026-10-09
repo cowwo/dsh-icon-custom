@@ -288,5 +288,42 @@ console.log('— 字典:两种语言都有角标文案 —')
   }
 }
 
+console.log('— 标签页角标:合成失败也必须说出来(异步失败接不住同步 try/catch) —')
+{
+  // 真实代码:合成状态 + 告警去重 + 那个"绝不静默"的包装。
+  const region = slice('let lastComposeError = null;', '\t\t/**\n\t\t * Re-assert the tab badge', 'favicon compose')
+  const warnings = []
+  const consoleStub = { warn: (...args) => warnings.push(args.map(String).join(' ')) }
+  const api = new Function('Promise', 'console', region + '\nreturn { composeFavicon, setCompose: (fn) => { applyBadgeToFavicon = fn; } }')(Promise, consoleStub)
+  const settle = () => new Promise((r) => setTimeout(r, 0))
+  check('切片里拿到了包装函数', typeof api.composeFavicon, 'function')
+
+  api.setCompose(() => Promise.resolve())
+  api.composeFavicon(3, 'md')
+  await settle()
+  check('合成成功时不告警', warnings.length, 0)
+
+  // 同步 try/catch 接不住异步 reject —— 这正是"没告警也没角标"的那种状态。
+  api.setCompose(() => Promise.reject(new Error('icon-load')))
+  api.composeFavicon(3, 'md')
+  await settle()
+  check('异步失败被说出来一次', warnings.length, 1)
+  check('告警里带原因', /icon-load/.test(warnings[0] ?? ''), true)
+
+  api.composeFavicon(3, 'md')
+  await settle()
+  check('同一原因不重复告警(5 秒看门狗会反复调)', warnings.length, 1)
+
+  api.setCompose(() => Promise.reject(new Error('tainted')))
+  api.composeFavicon(3, 'md')
+  await settle()
+  check('换了原因要再报一次', warnings.length, 2)
+
+  api.setCompose(() => { throw new Error('sync-boom') })
+  api.composeFavicon(3, 'md')
+  await settle()
+  check('同步抛错也被接住并报出', warnings.length, 3)
+}
+
 console.log(`\n结果: ${pass} 通过 · ${fail} 失败`)
 process.exit(fail > 0 ? 1 : 0)
