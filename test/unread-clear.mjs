@@ -29,7 +29,7 @@ function extract(marker) {
 }
 
 // —— 1. 水位存储(宿主时钟域 + v1→v2 迁移)——
-const seenRegion = slice('const SEEN_STORE_KEY =', 'function currentSessionIds(list) {', 'seen store')
+const seenRegion = slice('const SEEN_STORE_KEY =', '\n\t\t/**\n\t\t * Whether this page is on screen at all.', 'seen store')
 function makeStore(initial) {
   const data = new Map(Object.entries(initial))
   const localStorage = {
@@ -41,9 +41,22 @@ function makeStore(initial) {
 }
 
 // —— 2. 会话判定 ——
-const helperSrc = slice('function currentSessionIds(list) {', '\n\t\t/**\n\t\t * How many sessions', 'currentSessionIds/lastTurnEndAt')
+// 切片要从 `documentVisible` 起:现在的判定先看"屏幕报表"(面板/可见性/DOM),再看保留计数。
+const helperSrc = slice('function documentVisible() {', '\n\t\t/**\n\t\t * How many sessions', 'currentSessionIds/lastTurnEndAt')
 const collectSrc = slice('function collectUnread(list, pending, config, seen) {', '\n\t\t//#endregion', 'collectUnread')
-const helpers = new Function('LAST_TURN_END_KEY', helperSrc + '\n' + collectSrc + '\nreturn { currentSessionIds, lastTurnEndAt, collectUnread }')('lastTurnEnd')
+/** 一个假的 document:`displayed` 给了会话 id 就当作对话区渲染着它。 */
+function fakeDocument({ displayed, hidden } = {}) {
+  return {
+    visibilityState: hidden === true ? 'hidden' : 'visible',
+    querySelector: (selector) => (displayed === undefined || selector !== '[data-conversation-session]'
+      ? null
+      : { getAttribute: () => displayed })
+  }
+}
+function makeHelpers(document) {
+  return new Function('LAST_TURN_END_KEY', 'document', helperSrc + '\n' + collectSrc + '\nreturn { currentSessionIds, lastTurnEndAt, collectUnread, documentVisible, displayedSessionId }')('lastTurnEnd', document)
+}
+const helpers = makeHelpers(fakeDocument())
 
 // —— 3. BadgeSource 里那段真实的 effect(上弦 + 单次到点)——
 const effectBody = slice('const snapshot = stayLive.current.list !==', '}, [staySignature, delayMs]);', 'stay effect')
@@ -302,6 +315,37 @@ console.log('— 降级姿态:放弃时撤掉红点,而不是冻在那儿 —')
   api.noteWorkspaceDotFailure('第三次')
   check('第三次连续失败 → 放弃', api.state().givenUp, true)
   check('放弃时把已有的点撤掉', api.state().restores, 0)
+}
+
+console.log('— 屏幕报表:谁在被看着,由页面说了算 —')
+{
+  // 两个会话都挂着"主面板保留"——正是残留保留的样子。
+  const list = {
+    ids: ['session-a', 'session-b'],
+    byId: {
+      'session-a': { id: 'session-a', retainedBy: { mainView: 1 } },
+      'session-b': { id: 'session-b', retainedBy: { mainView: 1 } }
+    }
+  }
+  check('全局面板盖住对话时不看任何会话(修的就是这条)',
+    makeHelpers(fakeDocument()).currentSessionIds(list, { panelActive: true, visible: true, displayed: undefined }), [])
+  check('标签页隐藏时不看任何会话',
+    makeHelpers(fakeDocument({ hidden: true })).currentSessionIds(list, { panelActive: false, visible: false, displayed: 'session-a' }), [])
+  check('屏幕上是哪个就只算哪个(残留保留不牵连)',
+    makeHelpers(fakeDocument()).currentSessionIds(list, { panelActive: false, visible: true, displayed: 'session-b' }), ['session-b'])
+  check('拿不到屏幕信号时退回保留计数(老行为不退化)',
+    makeHelpers(fakeDocument()).currentSessionIds(list, {}), ['session-a', 'session-b'])
+  check('完全不传屏幕报表也退回保留计数',
+    makeHelpers(fakeDocument()).currentSessionIds(list), ['session-a', 'session-b'])
+  check('list.current 仍排在保留计数之前',
+    makeHelpers(fakeDocument()).currentSessionIds({ ...list, current: 'session-b' }, {}), ['session-b'])
+  check('屏幕上的会话优先于 list.current',
+    makeHelpers(fakeDocument()).currentSessionIds({ ...list, current: 'session-b' }, { panelActive: false, visible: true, displayed: 'session-a' }), ['session-a'])
+  // 两个探针本身:DOM 说得清就读出来,说不清就交回 undefined(交给保留计数)。
+  check('DOM 写着哪个会话就读出哪个', makeHelpers(fakeDocument({ displayed: 'session-x' })).displayedSessionId(), 'session-x')
+  check('DOM 没有这个标记时交回 undefined', makeHelpers(fakeDocument()).displayedSessionId(), undefined)
+  check('标签页隐藏时可见性为假', makeHelpers(fakeDocument({ hidden: true })).documentVisible(), false)
+  check('标签页可见时可见性为真', makeHelpers(fakeDocument()).documentVisible(), true)
 }
 
 console.log(`\n结果: ${pass} 通过 · ${fail} 失败`)

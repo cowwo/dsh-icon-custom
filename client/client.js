@@ -80,7 +80,7 @@ window.__ModuleLoader__.load({
 			badgeTestHint: "真实未读 = 有会话发生了上面勾选的情况、而且你还没看过它(打开该会话即视为已读)。你正开着的会话也算——窗口可能被最小化、页面可能切到后台,这里无从判断你在不在看,所以不做这个区分。只有子代理不计。手动模式:自己填数字试看效果。刷新页面后回到真实未读。",
 			clearDelayLabel: "进入会话后多久算已读:",
 			clearDelayUnit: "秒",
-			clearDelayHint: "填 0 = 进去就算已读(红点立即消失)。大于 0 时,你要在那个会话里连续待满这么多秒它才算看过:中途切走会清零重数,刷新页面也重新数。**计时只认\"你进入会话时已经存在的结束\"**——你人已经在里面的时候又跑完一轮,那一轮不算数:它会一直亮着,等你切走再进来才会清。上限 600 秒。已读记在宿主($DSH_HOME/custom-favicon/unread-seen.json):任何一台设备上看过,所有设备都不再提醒;浏览器那份只是缓存,清站点数据不会把已读丢回去。"
+			clearDelayHint: "填 0 = 进去就算已读(红点立即消失)。大于 0 时,你要在那个会话里连续待满这么多秒它才算看过:中途切走会清零重数,刷新页面也重新数。**计时只认\"你进入会话时已经存在的结束\"**——你人已经在里面的时候又跑完一轮,那一轮不算数:它会一直亮着,等你切走再进来才会清。上限 600 秒。**只有它真的显示在屏幕上、且标签页在前台时才算看过**:切到「插件/设置」页或把标签页切到后台都不算。已读记在宿主($DSH_HOME/custom-favicon/unread-seen.json):任何一台设备上看过,所有设备都不再提醒;浏览器那份只是缓存,清站点数据不会把已读丢回去。"
 		};
 		const en = {
 			nav: "Favicon",
@@ -153,7 +153,7 @@ window.__ModuleLoader__.load({
 			badgeTestHint: "Real unread = a session ended for one of the checked reasons and you have not looked at it yet (opening a session marks it read). The session you are viewing counts too — the window may be minimised or the page in the background, so this half cannot tell whether you are looking, and does not pretend to. Only sub-agents never count. Manual = type a number to preview. Resets to Real on reload.",
 			clearDelayLabel: "Mark read after staying:",
 			clearDelayUnit: "seconds",
-			clearDelayHint: "0 = read as soon as you enter (the dot clears at once). Above 0 you must stay in that session for this many seconds before it counts as read: leaving it resets the clock, and so does a reload. The clock only ever covers **the ending that was already there when you entered** — a turn that finishes while you are sitting in the session does not count: it stays red until you leave and come back. Capped at 600 seconds. Read state lives on the Host ($DSH_HOME/custom-favicon/unread-seen.json): read on any device means read on every device, and the browser's own copy is only a cache — clearing site data no longer throws it away."
+			clearDelayHint: "0 = read as soon as you enter (the dot clears at once). Above 0 you must stay in that session for this many seconds before it counts as read: leaving it resets the clock, and so does a reload. The clock only ever covers **the ending that was already there when you entered** — a turn that finishes while you are sitting in the session does not count: it stays red until you leave and come back. Capped at 600 seconds. It only counts while that session is really on screen in the foreground tab: a settings or plugins page, or a tab in the background, is not \"being looked at\". Read state lives on the Host ($DSH_HOME/custom-favicon/unread-seen.json): read on any device means read on every device, and the browser's own copy is only a cache — clearing site data no longer throws it away."
 		};
 		//#endregion
 
@@ -563,22 +563,61 @@ window.__ModuleLoader__.load({
 			return changed;
 		}
 		/**
+		 * Whether this page is on screen at all.
+		 *
+		 * A hidden tab is not "being looked at": the clock must not run while the page
+		 * is in the background, or a session left open in another tab would be marked
+		 * read for every device. Unknown (an exotic embedder) counts as visible, which
+		 * is the pre-0.12.1 behaviour.
+		 * @returns whether the page is visible.
+		 */
+		function documentVisible() {
+			try { return document.visibilityState !== "hidden"; } catch { return true; }
+		}
+		/**
+		 * The session whose conversation the page is rendering right now, from the DOM.
+		 *
+		 * This is the only signal that names the session on screen, and it is the one
+		 * that keeps a stale retention from clearing a dot: `retainedBy.mainView` means
+		 * "recently opened, not yet released", not "displayed". `undefined` means this
+		 * build carries no such marker (or the probe failed) and callers must fall back
+		 * to the retention answer rather than treat it as "nothing is displayed".
+		 * @returns the session id, or undefined when the page cannot say.
+		 */
+		function displayedSessionId() {
+			try {
+				const node = document.querySelector("[data-conversation-session]");
+				if (node === null) return undefined;
+				const id = node.getAttribute("data-conversation-session");
+				return typeof id === "string" && id !== "" ? id : undefined;
+			} catch { return undefined; }
+		}
+		/**
 		 * Every session the main view is showing.
 		 *
-		 * The official signal is the row's `retainedBy.mainView` retention count, the
-		 * same one ui-layout's DocumentTitle, ui-cordis, ui-open-in-app and ui-session
-		 * read (`list.current` is honoured first for runtimes that expose it).
+		 * `view` carries what the page itself says about the screen:
+		 *   * `panelActive` — a global panel (settings, plugins, …) replaced the
+		 *     conversation. DSH's own sidebar treats that as "no current session"
+		 *     (`usePanelInfo((info) => info.activePanelId !== null)`), and following it
+		 *     is what fixes the "cleared a dot I never opened" report: the conversation
+		 *     is simply not on screen.
+		 *   * `visible` — whether this page is on screen at all.
+		 *   * `displayed` — the session the conversation is rendering, when the DOM can
+		 *     name it. That is the precise answer and it wins over retention.
 		 *
-		 * It returns ALL of them, not one. The pane retains the incoming session
-		 * BEFORE it releases the outgoing one, and a retention that outlives its pane
-		 * can leave an old session looking "current" for good — and picking a single
-		 * id then meant the session you were actually reading was never marked read:
-		 * the dot stayed red however long you stayed in it. Each retained session
-		 * gets its own stay clock instead.
+		 * Retention (`retainedBy.mainView`) stays as the fallback: it is what shipped
+		 * before, it keeps working on a build without the newer signals, and its known
+		 * weakness (a release that lags behind the pane) only costs a false "read" when
+		 * nothing better is available.
 		 * @param list - the session list snapshot (may be absent).
+		 * @param view - the screen report described above (may be absent).
 		 * @returns the ids being viewed, in list order; `[]` when there are none.
 		 */
-		function currentSessionIds(list) {
+		function currentSessionIds(list, view) {
+			const screen = view !== null && typeof view === "object" ? view : {};
+			if (screen.visible === false) return [];
+			if (screen.panelActive === true) return [];
+			if (typeof screen.displayed === "string" && screen.displayed !== "") return [screen.displayed];
 			if (list === null || typeof list !== "object") return [];
 			if (typeof list.current === "string" && list.current !== "") return [list.current];
 			const byId = list.byId;
@@ -1688,7 +1727,21 @@ window.__ModuleLoader__.load({
 				pruneSeenState();
 				saveSeenState();
 			}, [list]);
-			const currentIds = currentSessionIds(list);
+			// What the page says about the screen, refreshed on the two moments that can
+			// change it without the session list changing: a global panel replacing the
+			// conversation (its own standard prop, the same one the shipped sidebar reads)
+			// and the tab going to the background. Both are read here, not inferred, so
+			// "you are looking at it" stops being a guess about stale retention.
+			const panelActive = typeof props.usePanelInfo === "function"
+				? props.usePanelInfo((info) => info !== null && typeof info === "object" && info.activePanelId !== null)
+				: false;
+			const [visible, setVisible] = React.useState(documentVisible);
+			React.useEffect(() => {
+				const onVisibility = () => setVisible(documentVisible());
+				window.addEventListener("visibilitychange", onVisibility);
+				return () => window.removeEventListener("visibilitychange", onVisibility);
+			}, []);
+			const currentIds = currentSessionIds(list, { panelActive, visible, displayed: displayedSessionId() });
 			const items = collectUnread(list, pending, config, seenState.seen);
 			const count = items.length;
 			// Being in a session is what marks it read — and the clock that does it is
