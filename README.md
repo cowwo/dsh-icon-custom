@@ -53,27 +53,29 @@ Once the page is **installed as an app**, the same unread number is also shown o
 >
 > Either way it exists **only while the app window is open**: close the window and it is gone (that is not a bug), and nothing can refresh it afterwards (there is no push server, so with no page running there is no code running).
 
-Platform support as of 0.11.1:
+Platform support as of 0.17.0 (every row has a source; see ADR 0005 / 0009):
 
 | Platform | Badge | Status |
 |---|---|---|
 | Windows **Chrome** 81+ | Dark circle + **white number** (Chrome's own overlay icon, lower-right) | Confirmed by Chrome's docs screenshot + Chromium source; **not yet measured on this machine** |
 | Windows **Edge** 81+ | Goes through the Windows badge channel; Microsoft's docs support numbers, but this machine measured the number being drawn as a dot | **Measured anomaly** (2026-10-01) |
-| macOS Chrome / Edge 81+ | Dock badge | Unverified (the code is ready; same single call) |
-| macOS Safari 17+ ("Add to Dock") | Dock badge | Unverified |
-| iOS / iPadOS Safari 16.4+ (Add to Home Screen) | Number on the home-screen icon | Unverified; and it appears **only after notifications have been granted** — this plugin does not request that permission yet, so no badge on iOS for now |
+| macOS **Chrome / Edge** 81+ | Dock badge (red, numeric) | Confirmed in source (MDN: Chrome supports Windows and macOS since 81; `badge_manager_delegate_mac.cc` → app shim → `NSApp.dockTile.badgeLabel`); **not measured on a Mac here**. Needs **no** notification permission, but only works for the **running installed app** |
+| macOS **Safari 17+** ("Add to Dock", macOS Sonoma 14+) | Dock badge (red, numeric) | Supported per Apple's own documentation; it **only appears after notifications are granted** — that is what the permission row in settings is for |
+| iOS / iPadOS Safari 16.4+ (Add to Home Screen) | Number on the home-screen icon | Supported; also **requires notifications to be granted first** (the "Allow notifications" button does that) |
 | Android Chrome / Edge | — | **Not supported by the system**: Chromium compiles the badge implementation out on Android, and a launcher dot can only come from a **notification** (this plugin posts none) |
 | HarmonyOS | — | No public evidence of any implementation; **expected unsupported** (native badges there are ArkTS-only) |
 | Firefox / Linux Chromium | — | No API / no OS API — calls resolve and do nothing |
 
-The "Current environment" line in the settings page reports **local facts only** (secure context? API present? installed as an app?). It never promises a badge will appear, because **detecting the API is not delivery** (that is exactly the Android and Linux case, and iOS adds a permission on top). Whether it really shows is up to the system.
+**About the "notifications permission" row (since 0.17.0)**: below the badge switch the settings page now shows one local reading (**granted / not granted / denied / no Notification API in this browser**) plus an "Allow notifications" button that appears only while the permission is still undecided (nothing left to ask once granted; once denied the browser refuses to prompt again, so the row says where to change it instead). It is **not a plugin switch** — it is Apple's rule: Safari ties the badge permission to the notifications permission, and a Dock or home-screen web app that has not been allowed to notify simply has its `setAppBadge()` calls dropped. **Chrome / Edge need none of this**, and the permission is only ever used to draw the badge — the plugin sends no notifications. If the permission moves outside the page (changed in System Settings, or prompted by another tab) the row follows; the moment it becomes *granted* the current number is re-asserted at once, because every earlier call was dropped while there was no permission.
+
+The "Current environment" line in the settings page reports **local facts only** (secure context? API present? installed as an app?). It never promises a badge will appear, because **detecting the API is not delivery** (that is exactly the Android and Linux case, and WebKit adds a permission on top). Whether it really shows is up to the system.
 
 Two behaviours that look like bugs but are not:
 
 - **A "manual test" number typed in a normal browser tab produces no taskbar badge** — correct: the badge belongs to the **installed app window**; a plain tab's call is silently ignored.
 - **No badge when the page is reached over LAN `http://192.168.x.x`** — the Badging API requires a secure context; the settings page then says to use localhost or https.
 
-The reasoning (why no notifications, why no service worker, why no platform gating) is recorded in [`docs/adr/0005-app-icon-badge.md`](./docs/adr/0005-app-icon-badge.md).
+The reasoning (why no notifications are sent, why no service worker, why no platform gating) is recorded in [`docs/adr/0005-app-icon-badge.md`](./docs/adr/0005-app-icon-badge.md); the notifications-permission row (why it is probed separately, why it never gates the badge call) is in [`docs/adr/0009-notification-permission.md`](./docs/adr/0009-notification-permission.md).
 
 ## Format support
 

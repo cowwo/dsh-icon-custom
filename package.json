@@ -1,12 +1,12 @@
 {
   "name": "dsh-icon-custom",
   "version": "0.16.0",
-  "description": "自定义浏览器标签页图标:在设置页上传 SVG/PNG/ICO,立即生效并持久保存,自动适配安卓/iOS/平板 PWA 图标,并可把未读数字显示为系统应用图标角标(Windows 任务栏)。· Custom browser tab favicon: upload SVG/PNG/ICO from the settings page, applies instantly and persists, auto-sizes PWA icons for Android/iOS/tablets, and projects the unread count onto the system app-icon badge (Windows taskbar).",
+  "description": "自定义浏览器标签页图标:在设置页上传 SVG/PNG/ICO,立即生效并持久保存,自动适配安卓/iOS/平板 PWA 图标,并可把未读数字显示为系统应用图标角标(Windows 任务栏 / macOS Dock,含通知权限申请)。· Custom browser tab favicon: upload SVG/PNG/ICO from the settings page, applies instantly and persists, auto-sizes PWA icons for Android/iOS/tablets, and projects the unread count onto the system app-icon badge (Windows taskbar / macOS Dock, notifications permission included).",
   "type": "module",
   "main": "lib/index.js",
   "license": "MIT",
   "scripts": {
-    "test": "node test/app-badge.mjs && node test/unread-panel.mjs && node test/unread-clear.mjs && node test/unread-rows.mjs && node test/unread-seen.mjs && node test/unread-host-sync.mjs"
+    "test": "node test/app-badge.mjs && node test/notification-permission.mjs && node test/unread-panel.mjs && node test/unread-clear.mjs && node test/unread-rows.mjs && node test/unread-seen.mjs && node test/unread-host-sync.mjs"
   },
   "dependencies": {
     "jimp": "^1.6.1",

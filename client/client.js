@@ -71,12 +71,19 @@ window.__ModuleLoader__.load({
 			workspaceDotLabel: "在工作区和会话行上显示红点(实验)",
 			workspaceDotHint: "在侧栏工作区那一行的文件夹图标上点一个小红点(收起的工作区里有多少未读,就看它),有未读的会话在其标题右边也跟一个小红点。会话行上的点只在那一行真的显示着时才画:折叠起来的会话由工作区那一行的点和「待处理」清单代表。这一项是贴着页面结构做的,DSH 升级后可能失效;失效时只会变成\"不显示\",不会影响红点数字、清单、跳转这些功能,随时可以关掉它。",
 			appBadgeLabel: "在系统应用图标上显示红点",
-			appBadgeHint: "安装为应用后,把同一个数字也放到系统图标上:Windows 是任务栏图标上的角标,macOS 是 Dock 角标,iOS 是主屏图标上的数字。样子由系统决定——Windows 上 Chrome 画深色圆+白字,Edge 走 Windows 系统徽章通道(是否显示数字由 Edge/Windows 决定);插件会周期重设数字,但只在应用窗口开着时更新。",
+			appBadgeHint: "安装为应用后,把同一个数字也放到系统图标上:Windows 是任务栏图标上的角标,macOS 是 Dock 角标,iOS 是主屏图标上的数字。样子由系统决定——Windows 上 Chrome 画深色圆+白字,Edge 走 Windows 系统徽章通道(是否显示数字由 Edge/Windows 决定);插件会周期重设数字,但只在应用窗口开着时更新。Safari 的程序坞网页应用 / 主屏应用还要先允许通知(见下面的「通知权限」),否则角标不会出现。",
 			appBadgeFootnote: "角标只在应用窗口开着时由本插件更新;数字超过 99 时由系统显示为 99+。",
 			appBadgeProbeInstalled: "当前环境:已安装为应用,本机可以设置角标。是否真正显示由系统决定。",
 			appBadgeProbeTab: "当前环境:浏览器标签页(不是安装的应用)——安装为应用后才会显示角标。",
 			appBadgeProbeUnsupported: "当前环境:本机没有这个能力(当前浏览器不支持应用角标)。",
 			appBadgeProbeInsecure: "当前环境:不是安全上下文(请用 localhost 或 https 访问),系统角标不可用。",
+			notificationPermissionLabel: "通知权限:",
+			notificationPermissionGranted: "已授予",
+			notificationPermissionDefault: "未授予",
+			notificationPermissionDenied: "已被拒绝(要去系统设置的「通知」里打开)",
+			notificationPermissionUnsupported: "本机浏览器没有通知能力",
+			notificationPermissionButton: "允许通知",
+			notificationPermissionHint: "Chrome / Edge 的角标不需要这一步;Safari 不一样——macOS 的「添加到程序坞」网页应用和 iOS 的主屏应用,只有在你允许通知之后才会画出角标(Apple 把角标权限绑在通知权限上)。这里只申请权限,本插件目前不会给你发通知。",
 			badgeTestHint: "真实未读 = 有会话发生了上面勾选的情况、而且你还没看过它(打开该会话即视为已读)。你正开着的会话也算——窗口可能被最小化、页面可能切到后台,这里无从判断你在不在看,所以不做这个区分。只有子代理不计。手动模式:自己填数字试看效果。刷新页面后回到真实未读。",
 			clearDelayLabel: "进入会话后多久算已读:",
 			clearDelayUnit: "秒",
@@ -144,12 +151,19 @@ window.__ModuleLoader__.load({
 			workspaceDotLabel: "Dots on workspace and session rows (experimental)",
 			workspaceDotHint: "Adds a small red dot to the folder icon of each workspace row (a collapsed workspace shows how many of its sessions are unread there), and one beside the title of every unread session row. A session dot is only drawn while that row is really rendered: folded sessions are represented by their workspace row's dot and the pending panel. This one reads the page structure, so a DSH upgrade may break it; when it does it simply stops showing, never affecting the counts, the list, or navigation. Turn it off any time.",
 			appBadgeLabel: "Badge the system app icon",
-			appBadgeHint: "Once installed as an app, the same number also goes to the system icon: a taskbar badge on Windows, a Dock badge on macOS, a number on the iOS home-screen icon. The system decides how it looks — on Windows, Chrome draws a dark circle with white text, while Edge goes through the Windows badge channel (whether it shows the number is up to Edge/Windows). The plugin re-asserts the number periodically, but only while the app window is open.",
+			appBadgeHint: "Once installed as an app, the same number also goes to the system icon: a taskbar badge on Windows, a Dock badge on macOS, a number on the iOS home-screen icon. The system decides how it looks — on Windows, Chrome draws a dark circle with white text, while Edge goes through the Windows badge channel (whether it shows the number is up to Edge/Windows). The plugin re-asserts the number periodically, but only while the app window is open. Safari's Dock and home-screen web apps additionally need notifications allowed first (see the permission row below), or the badge never appears.",
 			appBadgeFootnote: "The badge is only updated by this plugin while the app window is open; above 99 the system shows 99+.",
 			appBadgeProbeInstalled: "This environment: installed as an app, so this device can set a badge. Whether it actually appears is up to the system.",
 			appBadgeProbeTab: "This environment: a browser tab (not an installed app) — install as an app to get a badge.",
 			appBadgeProbeUnsupported: "This environment: no app-badge capability in this browser.",
 			appBadgeProbeInsecure: "This environment: not a secure context (use localhost or https) — the system badge is unavailable.",
+			notificationPermissionLabel: "Notifications permission:",
+			notificationPermissionGranted: "granted",
+			notificationPermissionDefault: "not granted",
+			notificationPermissionDenied: "denied (enable it in the system notifications settings)",
+			notificationPermissionUnsupported: "this browser has no Notification API",
+			notificationPermissionButton: "Allow notifications",
+			notificationPermissionHint: "A badge needs no notification permission on Chrome / Edge, but Safari is different: a macOS web app added to the Dock (or an iOS home-screen web app) only draws its badge once you allow notifications — Apple ties the two together. This only asks for the permission; the plugin does not send notifications.",
 			badgeTestHint: "Real unread = a session ended for one of the checked reasons and you have not looked at it yet (opening a session marks it read). The session you are viewing counts too — the window may be minimised or the page in the background, so this half cannot tell whether you are looking, and does not pretend to. Only sub-agents never count. Manual = type a number to preview. Resets to Real on reload.",
 			clearDelayLabel: "Mark read after staying:",
 			clearDelayUnit: "seconds",
@@ -970,6 +984,202 @@ window.__ModuleLoader__.load({
 			if (unreadConfig.appBadge !== true) return;
 			if (normalizeCount(effectiveCount()) <= 0) return;
 			reconcileAppBadge(true);
+		}
+
+		//#endregion
+		//#region notifications permission (the WebKit half of app badging)
+		// On WebKit the badge and the notifications permission are one feature:
+		// Apple's own words are "when users allow a web app to send
+		// notifications, that includes permissions for the web app to use
+		// badging" — so a macOS web app added to the Dock (and an iOS
+		// home-screen web app) draws NO badge until the user allows
+		// notifications (sources: docs/adr/0009-notification-permission.md).
+		//
+		// This region does NOT gate `applyAppBadge`: Chromium needs none of it,
+		// and the API only reports "not permitted" by drawing nothing, which is
+		// undetectable. Keeping the call site unconditional is ADR 0005's rule;
+		// what is added here is the PRECONDITION, made visible and requestable
+		// from one user gesture.
+		/** The three states the spec defines; anything else is "no API". */
+		const NOTIFICATION_PERMISSION_STATES = ["granted", "denied", "default"];
+
+		/**
+		 * Normalize one reading of `Notification.permission` into a local fact.
+		 * @param value - the raw reading; only the spec strings count.
+		 * @returns `"granted" | "denied" | "default" | "unsupported"`.
+		 */
+		function normalizeNotificationPermission(value) {
+			return typeof value === "string" && NOTIFICATION_PERMISSION_STATES.includes(value) ? value : "unsupported";
+		}
+
+		/**
+		 * Normalize an already-shaped probe, so every reader of it takes dirty
+		 * input the same way: only the three spec states are real, and only a
+		 * strict `true` is a request entry point.
+		 * @param probe - a `{ state, canRequest }` probe, or anything else.
+		 * @returns the same two facts, normalized.
+		 */
+		function notificationPermissionFacts(probe) {
+			const source = probe !== null && typeof probe === "object" ? probe : {};
+			return {
+				state: normalizeNotificationPermission(source.state),
+				canRequest: source.canRequest === true
+			};
+		}
+
+		/**
+		 * Shape a raw `{ permission, canRequest }` reading, mirroring
+		 * `badgeCapabilityProbe`: two independent local facts, no platform claim.
+		 * @param env - the raw reading; anything else reads false.
+		 * @returns the probe for this device.
+		 */
+		function notificationPermissionProbe(env) {
+			const source = env !== null && typeof env === "object" ? env : {};
+			return notificationPermissionFacts({
+				state: normalizeNotificationPermission(source.permission),
+				canRequest: source.canRequest === true
+			});
+		}
+
+		/**
+		 * Read that fact off the window this code runs in.
+		 *
+		 * "unsupported" covers both a browser with no Notification API and a
+		 * permission string this code has never heard of — from the user's side
+		 * those are the same thing: there is nothing to grant here.
+		 * @returns the probe for this device.
+		 */
+		function notificationPermissionEnv() {
+			const api = typeof Notification === "object" && Notification !== null ? Notification : null;
+			return notificationPermissionProbe({
+				permission: api === null ? undefined : api.permission,
+				canRequest: api !== null && typeof api.requestPermission === "function"
+			});
+		}
+
+		/**
+		 * Which settings-page sentence describes this reading.
+		 * @param probe - a `notificationPermissionProbe` result.
+		 * @returns a locale key.
+		 */
+		function notificationPermissionKey(probe) {
+			const facts = notificationPermissionFacts(probe);
+			if (facts.state === "granted") return "notificationPermissionGranted";
+			if (facts.state === "denied") return "notificationPermissionDenied";
+			if (facts.state === "default") return "notificationPermissionDefault";
+			return "notificationPermissionUnsupported";
+		}
+
+		/**
+		 * Whether the "allow notifications" button can do anything.
+		 *
+		 * Only an undecided permission is worth a prompt: once granted there is
+		 * nothing left to ask, and once denied the browser refuses to prompt
+		 * again, so the settings page says where to change it instead of showing
+		 * a button that would silently do nothing.
+		 * @param probe - a `notificationPermissionProbe` result.
+		 * @returns true only when a prompt could still decide the fact.
+		 */
+		function notificationPermissionRequestable(probe) {
+			const facts = notificationPermissionFacts(probe);
+			return facts.state === "default" && facts.canRequest === true;
+		}
+
+		/**
+		 * Ask for the notifications permission — the ONE place that does.
+		 *
+		 * Must be called from a user gesture (the settings button's click):
+		 * WebKit and Chromium both drop a prompt that no activation asked for.
+		 * Resolves to a fresh probe and never rejects, so the caller can drop the
+		 * result straight into React state; the old callback form (Safari 15) is
+		 * why the returned promise is not the only path out.
+		 * @returns a Promise for the permission probe after the prompt.
+		 */
+		function requestNotificationPermission() {
+			const api = typeof Notification === "object" && Notification !== null ? Notification : null;
+			if (api === null || typeof api.requestPermission !== "function") return Promise.resolve(notificationPermissionEnv());
+			return new Promise((resolve) => {
+				// The prompt's own answer is authoritative when it comes back;
+				// re-reading `.permission` covers the promise form and a rejection
+				// (no user gesture, or not an installed web app on WebKit).
+				const settle = (value) => {
+					const next = notificationPermissionEnv();
+					resolve({
+						state: typeof value === "string" ? normalizeNotificationPermission(value) : next.state,
+						canRequest: next.canRequest
+					});
+				};
+				let returned;
+				try {
+					returned = api.requestPermission(settle);
+				} catch {
+					settle(undefined);
+					return;
+				}
+				if (returned !== null && typeof returned === "object" && typeof returned.then === "function") {
+					returned.then(settle, () => settle(undefined));
+				}
+			});
+		}
+
+		/**
+		 * Follow the permission while this page is open.
+		 *
+		 * It can move outside the page (System Settings, the browser's own
+		 * settings, another tab's prompt), and a stale "not granted" beside a
+		 * granted permission is exactly the kind of lie this half avoids.
+		 * `permissions.query({ name: "notifications" })` is the precise channel;
+		 * a re-read on focus/visibilitychange is the portable one (WebKit does
+		 * not implement every permission descriptor), and both are cheap.
+		 * Publishes only when the fact actually changed.
+		 * @param fn - called with a fresh probe when the fact moved.
+		 * @returns an unsubscribe function.
+		 */
+		function subscribeNotificationPermission(fn) {
+			if (typeof fn !== "function") return () => {};
+			const win = typeof window !== "undefined" ? window : null;
+			const navigatorObject = typeof navigator === "object" && navigator !== null ? navigator : null;
+			const read = () => {
+				const next = notificationPermissionEnv();
+				return { next, id: `${next.state}:${next.canRequest === true}` };
+			};
+			// Seeded with the mount reading, so mounting never re-publishes the
+			// value the settings page already rendered.
+			let last = read().id;
+			// Fire only on a real change: the settings page already rendered the
+			// mount reading, and a focus event that changed nothing must not repaint.
+			const publish = () => {
+				const reading = read();
+				if (reading.id === last) return;
+				last = reading.id;
+				try { fn(reading.next); } catch {}
+			};
+			/** @type {Array<() => void>} */
+			const unsubscribes = [];
+			if (win !== null && typeof win.addEventListener === "function") {
+				for (const event of ["focus", "visibilitychange", "pageshow"]) {
+					win.addEventListener(event, publish);
+					unsubscribes.push(() => win.removeEventListener(event, publish));
+				}
+			}
+			try {
+				if (navigatorObject !== null && navigatorObject.permissions && typeof navigatorObject.permissions.query === "function") {
+					const pending = navigatorObject.permissions.query({ name: "notifications" });
+					if (pending !== null && typeof pending === "object" && typeof pending.then === "function") {
+						pending.then((status) => {
+							if (status === null || typeof status !== "object" || typeof status.addEventListener !== "function") return;
+							status.addEventListener("change", publish);
+							unsubscribes.push(() => status.removeEventListener("change", publish));
+						}).catch(() => {});
+					}
+				}
+			} catch {}
+			return () => {
+				for (const off of unsubscribes) {
+					try { off(); } catch {}
+				}
+				unsubscribes.length = 0;
+			};
 		}
 
 		//#endregion
@@ -2333,6 +2543,28 @@ window.__ModuleLoader__.load({
 			// Sampled when the section mounts, which is the moment the user is
 			// looking at it. It reports local facts only (see badgeCapabilityProbe).
 			const [appBadgeProbe] = React.useState(() => appBadgeEnv());
+			// Live, unlike the capability probe above: the notifications permission
+			// can move outside this page (System Settings, another tab's prompt), and
+			// on WebKit the badge follows it.
+			const [notificationProbe, setNotificationProbe] = React.useState(() => notificationPermissionEnv());
+			const [permissionBusy, setPermissionBusy] = React.useState(false);
+			// A permission granted while the page is open is the WebKit precondition
+			// the badge was missing: every earlier call was dropped while there was
+			// no permission to draw it, so re-assert the number the page already shows.
+			const onPermissionChanged = React.useCallback((next) => {
+				setNotificationProbe(next);
+				if (next.state === "granted") reconcileAppBadge(true);
+			}, []);
+			React.useEffect(() => subscribeNotificationPermission(onPermissionChanged), [onPermissionChanged]);
+			// Called straight from the click: the prompt needs a user gesture, so it
+			// must never be moved into an effect.
+			const onRequestPermission = React.useCallback(() => {
+				setPermissionBusy(true);
+				requestNotificationPermission().then((next) => {
+					setPermissionBusy(false);
+					onPermissionChanged(next);
+				});
+			}, [onPermissionChanged]);
 			// Draft text for the delay box: typing must not save on every keystroke,
 			// and the box has to show the CLAMPED value once the save lands (type
 			// 99999 and it settles on the 600 cap instead of lying about it).
@@ -2703,6 +2935,20 @@ window.__ModuleLoader__.load({
 						React.createElement("div", { style: style.hint }, t("appBadgeHint")),
 						// What THIS device is — never a claim about the platform.
 						React.createElement("div", { style: style.hint }, t(appBadgeCapabilityKey(appBadgeProbe))),
+						// The WebKit precondition as a live local fact, plus the one
+						// gesture that can still decide it (button only while undecided).
+						React.createElement("div", { style: { display: "flex", alignItems: "center", flexWrap: "wrap", gap: "8px", marginTop: "8px" } },
+							React.createElement("span", { style: style.desc }, `${t("notificationPermissionLabel")}${t(notificationPermissionKey(notificationProbe))}`),
+							notificationPermissionRequestable(notificationProbe)
+								? React.createElement("button", {
+									type: "button",
+									style: { ...style.btn, ...(permissionBusy ? style.btnDisabled : null) },
+									disabled: permissionBusy,
+									onClick: onRequestPermission
+								}, t("notificationPermissionButton"))
+								: null
+						),
+						React.createElement("div", { style: style.hint }, t("notificationPermissionHint")),
 						React.createElement("div", { style: style.hint }, t("appBadgeFootnote"))
 					),
 					React.createElement("div", { style: style.hint }, t("badgeTestHint"))

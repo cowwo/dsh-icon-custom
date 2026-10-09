@@ -4,12 +4,17 @@
 
 accepted
 
+> **修订(0.17.0)**:本文有三处被后续查证修正,均已落到代码/文档:
+> 1. 通知权限**不只 iOS**:macOS Safari 程序坞网页应用同样要求它(Apple 支持 104996:先把通知请求在**网页应用里**应答;WWDC23 10120:"allowing notifications includes permissions to use badging")。所以设置页在角标开关下面多了一行「通知权限」加一个「允许通知」按钮,单独探测、不参与"该不该调"的判断,见 [ADR 0009](./0009-notification-permission.md)。
+> 2. 下文 Consequence 里 "macOS / iOS 由系统保留最后一次的值" **不成立**:Chromium 的 `AppShimManager::UpdateAppBadge` 挂着 `TODO(crbug.com/40761338): Support updating the app badge for apps that aren't currently running`——未运行的应用连角标值都没有地方存。
+> 3. Chromium 在 macOS 上的通路已由源码确认(`badge_manager_delegate_mac.cc` → app shim → `NSApp.dockTile.badgeLabel`),README 的矩阵里不再写"未验证(代码已就绪)",改为"源码印证、真机未测"。
+
 ## Context
 
 需求是「Win / mac / Android / iOS / 鸿蒙 上 PWA 安装后的**应用图标**显示红点通知」。查完一手资料(每条都有出处,见文末),有四条事实决定了做法:
 
 1. **真正实现 Badging API 的只有一半平台**。Windows / macOS 的 Chromium 81+、macOS Safari 17+("添加到程序坞")、iOS/iPadOS Safari 16.4+(主屏应用)。**安卓 Chromium 没有实现**:方法在 `navigator` 上存在,但 native 调用被 `#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_FUCHSIA)` 编译掉了,调用只会静默 resolve;安卓启动器上的圆点**只能由"活动通知"产生**。鸿蒙无任何公开实现证据(华为只文档化"添加到桌面快捷方式",上限 10 个),原生角标只能 ArkTS 设。Firefox 全无。
-2. **探测到 API ≠ 角标会出现**。安卓、Linux 上方法存在而静默无效;iOS 上还额外要求**用户已授予通知权限**(WebKit 原文:"the badge will only appear if the user has granted notifications permission"),而申请权限必须在用户手势里调 `Notification.requestPermission()`。
+2. **探测到 API ≠ 角标会出现**。安卓、Linux 上方法存在而静默无效;iOS 上还额外要求**用户已授予通知权限**(WebKit 原文:"the badge will only appear if the user has granted notifications permission"),而申请权限必须在用户手势里调 `Notification.requestPermission()`。(0.17.0 修订:**macOS Safari 同样如此**——见 [ADR 0009](./0009-notification-permission.md)。)
 3. **样子由系统决定,我们无权定制**。Windows 上 Chrome 自己画**深色圆 + 白字**,做成**任务栏按钮上的覆盖图标**;Edge 走 Windows 系统徽章通道,外观是系统样式,**是否显示数字由 Edge/Windows 决定**(官方文档支持数字,但本机在 Windows 11 上实测 `setAppBadge(7)` 只显示一个系统蓝点)。两者都只作用于**开着的应用窗口**;窗口关掉角标就没了(不是开始菜单/磁贴角标);数字超过 99 由 Chrome 饱和为 `99+`(`kMaxBadgeContent = 99u`)。
 4. **没有推送服务**。这是自托管 localhost 应用,没有 VAPID、没有 push 服务,所以**角标只能在某个应用窗口活着时更新**;窗口全关之后,没有任何代码在跑,连"保持数字新鲜"都做不到(Notification Triggers 已被 Chrome 官方放弃,Periodic Background Sync 需要浏览器进程活着且在安卓上无意义)。
 
@@ -45,10 +50,10 @@ Windows 一个都不需要;安卓/iOS 需要(一个要通知权限、一个整�
 
 ## Consequences
 
-- **关掉应用后角标消失(Windows)**;macOS / iOS 由系统保留最后一次的值。这不是 bug,README 显眼处已写明"只在应用窗口开着时更新、关窗即消失"。
+- **关掉应用后角标消失(Windows)**;macOS / iOS 由系统保留最后一次的值(0.17.0 修订:**这半边不成立**,Chromium 明确不支持未运行应用的角标,见顶部修订注)。这不是 bug,README 显眼处已写明"只在应用窗口开着时更新、关窗即消失"。
 - **Edge 的系统徽章链可能只画点**:5 秒看门狗会尝试重设数字,但最终渲染由 Edge/Windows 决定;这不是插件能绕过的。
 - **安卓用户会看到开关但看不到效果**:因为 `setAppBadge` 在安卓上存在且静默无效。由能力自检那句"本机可以设置角标,是否真正显示由系统决定"解释,并靠 README 平台矩阵说明。
-- **iOS 上暂时不会出现角标**(本版不申请通知权限);要出现就得连通知功能一起做,那正是下一轮。
+- **iOS 上暂时不会出现角标**(本版不申请通知权限);要出现就得连通知功能一起做,那正是下一轮。(0.17.0 已做这一轮的一半:申请权限的按钮与权限自检已存在,唯一申请入口是 `requestNotificationPermission()`;仍然不发通知,见 [ADR 0009](./0009-notification-permission.md)。)
 - 本轮只走 `navigator.setAppBadge`,不碰 favicon 合成、不碰 manifest 路由、不碰那 5 个图标 RPC 的返回形状;角标坏了就是"少了系统图标上那个数字",页内红点不受影响。
 - 宿主侧只多一个布尔字段(`unread.json` 里的 `appBadge`),老客户端忽略它,老宿主的响应被客户端归一化成默认值。
 
