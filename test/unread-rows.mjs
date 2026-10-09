@@ -136,10 +136,12 @@ function load(root, config = { workspaceDot: true }) {
 		setTimeout: () => 1,
 		clearTimeout: () => {}
 	}
+	// `runningConfig` is injected as well since 0.18.0: the same paint pass draws the
+	// running marks, and its switch is a separate object from the unread rule's.
 	const api = new Function(
-		'unreadConfig', 'document', 'window', 'console', 'NodeFilter',
+		'unreadConfig', 'runningConfig', 'RUNNING_YELLOW', 'document', 'window', 'console', 'NodeFilter',
 		region + '\nreturn { emitSidebarMarks, paintWorkspaceDots, clearWorkspaceDots };'
-	)(config, doc, win, { warn: () => {} }, { SHOW_TEXT: 4 })
+	)(config, { enabled: true }, '#f5c518', doc, win, { warn: () => {} }, { SHOW_TEXT: 4 })
 	return { api, doc }
 }
 

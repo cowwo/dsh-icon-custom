@@ -43,6 +43,19 @@ Notes:
 - It can be toggled at any time after upload — no re-upload needed.
 - This only affects the sidebar brand mark (the one next to `deepseek HARNESS`); PWA/installed-app icons are a separate option above.
 
+## Running marks (yellow)
+
+While a session is **running**, a yellow mark appears in four places: after the sidebar's **"工作区" label** a yellow number (how many sessions are running right now), a yellow dot on each **workspace folder icon**, a yellow dot on each **session row**, and the same number on the **top-left logo** and in the **bottom-right corner of the tab icon**. Live, no reload needed.
+
+- **How it sits next to the unread red dot**: numbers stack — red top-right, yellow bottom-right (after the label, on the top-left logo, and on the tab icon alike); dots sit side by side — **red on the left, yellow on the right** (on the workspace folder icon and on the session row alike). On the folder icon the red dot steps one dot to the left while the yellow is there, and steps back the moment it is gone. Each feature has its own switch — turning the yellow off leaves every red dot in place.
+- **The yellow mark IS the official "running"**: the session has a turn in flight and is not parked waiting for you — while it waits, the official row shows the amber "waiting for approval / waiting for answer / plan review" and the yellow goes dark. It tracks the official row's **grey spinner** exactly; the only difference is colour — the official one is deliberately quiet, this one is meant to be seen.
+- **Every fact is official**: each session's `running` from the session list (computed by the host, pushed live). The plugin stores nothing and infers nothing, so a reload is immediately right and a **process restart never leaves a yellow mark stuck on**.
+- **Sub-agents never count**: sub-agent sessions are not rendered in the sidebar at all (the same rule the red dot and the official row follow).
+- Above 99 it shows `99+`, the same rule as the red count; **the two numbers are always the same size** — when both appear they shrink together to the largest pair that fits, stacked and never overlapping (at a 16px tab icon or a 24px logo two digits are already tight: a big one beside a small one, or two overlapping, would make both unreadable), and a number shown alone keeps the normal size (so the small/medium/large setting applies only while a number is on its own — with both shown, all three sizes draw the same).
+- The switch is in **Settings → icon管理 → Running marks** and is **on by default**.
+
+> Why is the red count top-right and the yellow dot bottom-right instead of simply recolouring the official grey spinner? See [`docs/adr/0010-running-mark-is-a-second-projection.md`](./docs/adr/0010-running-mark-is-a-second-projection.md).
+
 ## App icon badge (the red dot on the system icon)
 
 Once the page is **installed as an app**, the same unread number is also shown on the **system icon**. The switch lives in **Settings → icon管理 → unread badge** ("Badge the system app icon") and is **on by default**; the number is **exactly the page number** (one computation, no extra clamping), so the two can never disagree.
@@ -53,7 +66,7 @@ Once the page is **installed as an app**, the same unread number is also shown o
 >
 > Either way it exists **only while the app window is open**: close the window and it is gone (that is not a bug), and nothing can refresh it afterwards (there is no push server, so with no page running there is no code running).
 
-Platform support as of 0.17.0 (every row has a source; see ADR 0005 / 0009):
+Platform support as of 0.18.0 (every row has a source; see ADR 0005 / 0009):
 
 | Platform | Badge | Status |
 |---|---|---|
@@ -90,7 +103,7 @@ The uploaded file is stored verbatim (never re‑encoded) so the favicon keeps i
 
 Icons are stored per‑user under `$DSH_HOME/custom-favicon/`. "Reset" only clears the active marker; stored files are kept for a future icon‑library UI.
 
-That directory also holds two JSON files: `unread.json` (which turn-end reasons count as unread) and `unread-seen.json` (the seen watermark, `{ version, seen: { sessionId → endAt } }`, capped at 400 entries and written temp-then-rename). Both are **disposable**: deleting the first restores the default rule, deleting the second makes each browser re-baseline at "the last time it was open" (which does not resurrect old dots). The watermark is host-owned on purpose — looked at on any device means read on every device — while each browser keeps its own copy as a cache and offline queue.
+That directory also holds three JSON files: `unread.json` (which turn-end reasons count as unread), `unread-seen.json` (the seen watermark, `{ version, seen: { sessionId → endAt } }`, capped at 400 entries and written temp-then-rename) and `running.json` (the running-mark switch — one boolean). All three are **disposable**: deleting the first restores the default rule, the second makes each browser re-baseline at "the last time it was open" (which does not resurrect old dots), and the third restores "show the yellow marks". **None of them stores what is running** — that is always the official host's live fact. The watermark is host-owned on purpose — looked at on any device means read on every device — while each browser keeps its own copy as a cache and offline queue.
 
 ## License
 

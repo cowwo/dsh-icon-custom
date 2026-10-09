@@ -40,6 +40,7 @@ window.__ModuleLoader__.load({
 			badgeSourceManual: "手动测试",
 			badgeTestUnit: "0 = 不显示",
 			badgeSizeLabel: "红点大小:",
+			badgeSizeHint: "单独出现时按这三档决定大小;红黄两颗数字同时出现时(未读 + 进行中),它们会一起缩到能塞下的最大尺寸 —— 这时三档画出来是一样的,因为画布就这么大。",
 			badgeSizeSmall: "小",
 			badgeSizeMedium: "中",
 			badgeSizeLarge: "大",
@@ -87,7 +88,12 @@ window.__ModuleLoader__.load({
 			badgeTestHint: "真实未读 = 有会话发生了上面勾选的情况、而且你还没看过它(打开该会话即视为已读)。你正开着的会话也算——窗口可能被最小化、页面可能切到后台,这里无从判断你在不在看,所以不做这个区分。只有子代理不计。手动模式:自己填数字试看效果。刷新页面后回到真实未读。",
 			clearDelayLabel: "进入会话后多久算已读:",
 			clearDelayUnit: "秒",
-			clearDelayHint: "填 0 = 进去就算已读(红点立即消失)。大于 0 时,你要在那个会话里连续待满这么多秒它才算看过:中途切走会清零重数,刷新页面也重新数。**计时只认\"你进入会话时已经存在的结束\"**——你人已经在里面的时候又跑完一轮,那一轮不算数:它会一直亮着,等你切走再进来才会清。上限 600 秒。**切到「插件/设置」页、或把标签页切到后台,都只是暂停计时,不会因此清掉红点**(它们不算离开);真正算离开的只有一件事:**去别的会话**。已读记在宿主($DSH_HOME/custom-favicon/unread-seen.json):任何一台设备上看过,所有设备都不再提醒;浏览器那份只是缓存,清站点数据不会把已读丢回去。"
+			clearDelayHint: "填 0 = 进去就算已读(红点立即消失)。大于 0 时,你要在那个会话里连续待满这么多秒它才算看过:中途切走会清零重数,刷新页面也重新数。**计时只认\"你进入会话时已经存在的结束\"**——你人已经在里面的时候又跑完一轮,那一轮不算数:它会一直亮着,等你切走再进来才会清。上限 600 秒。**切到「插件/设置」页、或把标签页切到后台,都只是暂停计时,不会因此清掉红点**(它们不算离开);真正算离开的只有一件事:**去别的会话**。已读记在宿主($DSH_HOME/custom-favicon/unread-seen.json):任何一台设备上看过,所有设备都不再提醒;浏览器那份只是缓存,清站点数据不会把已读丢回去。",
+			/** 进行中黄点(0.18.0):官方 running 的第二次投影,与红点互不牵连。 */
+			runningMarkSection: "进行中黄点",
+			runningMarkLabel: "显示进行中标记(标题数字 / 文件夹与会话行 / 左上角 / 标签页)",
+			runningMarkCount: "{n} 个进行中",
+			runningMarkHint: "黄点就是官方的「进行中」:会话有回合正在跑、而且没有停下来等你(停下等你的时候,官方那一行显示琥珀色的「等待审批 / 等待回答」,黄点也就不亮)。它和未读红点完全独立、各画各的:侧栏「工作区」标题后面是黄色数字——此刻全局有几个会话在跑(和红数字上下排:右上红、右下黄);工作区文件夹图标上是黄点,有未读时红点在左、黄点在右;会话行上同样是红点在左、黄点在右;左上角 Logo 与标签页图标右下角也是同一个数字,红数字仍占右上角。事实全部来自官方(会话列表里每个会话的 `running`)——插件不落盘、不推断,所以刷新页面立刻是对的,进程重启也不会留下一个永远亮着的黄点。关掉这个开关,红点完全不受影响。"
 		};
 		const en = {
 			nav: "Favicon",
@@ -120,6 +126,7 @@ window.__ModuleLoader__.load({
 			badgeSourceManual: "Manual",
 			badgeTestUnit: "0 = hidden",
 			badgeSizeLabel: "Badge size:",
+			badgeSizeHint: "A number shown on its own uses this size; when the red and the yellow number share the icon (unread + running) they shrink together to the largest pair that fits — the three sizes then draw the same, because the canvas is the constraint.",
 			badgeSizeSmall: "Small",
 			badgeSizeMedium: "Medium",
 			badgeSizeLarge: "Large",
@@ -167,7 +174,12 @@ window.__ModuleLoader__.load({
 			badgeTestHint: "Real unread = a session ended for one of the checked reasons and you have not looked at it yet (opening a session marks it read). The session you are viewing counts too — the window may be minimised or the page in the background, so this half cannot tell whether you are looking, and does not pretend to. Only sub-agents never count. Manual = type a number to preview. Resets to Real on reload.",
 			clearDelayLabel: "Mark read after staying:",
 			clearDelayUnit: "seconds",
-			clearDelayHint: "0 = read as soon as you enter (the dot clears at once). Above 0 you must stay in that session for this many seconds before it counts as read: leaving it resets the clock, and so does a reload. The clock only ever covers **the ending that was already there when you entered** — a turn that finishes while you are sitting in the session does not count: it stays red until you leave and come back. Capped at 600 seconds. A settings or plugins page, or a tab in the background, only **pauses** the clock — neither clears a dot (neither counts as leaving); the one thing that does count as leaving is **opening another session**. Read state lives on the Host ($DSH_HOME/custom-favicon/unread-seen.json): read on any device means read on every device, and the browser's own copy is only a cache — clearing site data no longer throws it away."
+			clearDelayHint: "0 = read as soon as you enter (the dot clears at once). Above 0 you must stay in that session for this many seconds before it counts as read: leaving it resets the clock, and so does a reload. The clock only ever covers **the ending that was already there when you entered** — a turn that finishes while you are sitting in the session does not count: it stays red until you leave and come back. Capped at 600 seconds. A settings or plugins page, or a tab in the background, only **pauses** the clock — neither clears a dot (neither counts as leaving); the one thing that does count as leaving is **opening another session**. Read state lives on the Host ($DSH_HOME/custom-favicon/unread-seen.json): read on any device means read on every device, and the browser's own copy is only a cache — clearing site data no longer throws it away.",
+			/** Running mark (0.18.0): a second projection of the official `running`. */
+			runningMarkSection: "Running marks",
+			runningMarkLabel: "Show running marks (header number / folder and session rows / top-left / tab)",
+			runningMarkCount: "{n} running",
+			runningMarkHint: "The yellow mark IS the official \"running\": the session has a turn in flight and is not parked waiting for you (while it waits, the official row shows the amber \"waiting for approval / waiting for answer\" and the yellow goes dark). It is completely independent of the unread red dot, and each draws its own mark: after the sidebar's \"工作区\" label sits the yellow NUMBER of sessions running right now (stacked against the red number — red top-right, yellow bottom-right); the workspace folder icon gets a yellow dot with the red dot to its left; a session row is red left, yellow right; and the top-left logo plus the bottom-right of the tab icon carry the same number, with the red number keeping its top-right corner. Every fact comes from the official host (each session's `running` in the session list); the plugin stores nothing and infers nothing, so a reload is immediately right and a process restart never leaves a yellow mark stuck on. Turning this off does not affect the red dot at all."
 		};
 		//#endregion
 
@@ -320,6 +332,35 @@ window.__ModuleLoader__.load({
 		function subscribeUnreadConfig(fn) {
 			unreadConfigListeners.add(fn);
 			return () => { unreadConfigListeners.delete(fn); };
+		}
+
+		/**
+		 * The running mark's own switch, and the yellow it paints with.
+		 *
+		 * Deliberately NOT a field on the unread rule: the two features answer
+		 * different questions ("something ended and you have not looked" vs
+		 * "something is running right now"), so neither switch may drag the other's
+		 * storage or response shape along. The yellow is a literal like the red
+		 * `#e5484d` already is — the theme has no yellow token, and the official
+		 * amber `--dsw-alias-state-warn-primary` (#f59e0b) is taken by the row's
+		 * "waiting for you" dot, which must stay tellable apart from this one.
+		 */
+		const RUNNING_YELLOW = "#f5c518";
+		/** Mirror of the host default (lib/running.js). */
+		const RUNNING_MARK_FALLBACK = true;
+		let runningConfig = { enabled: RUNNING_MARK_FALLBACK };
+		const runningConfigListeners = new Set();
+		function normalizeRunningConfig(input) {
+			const source = input !== null && typeof input === "object" ? input : {};
+			return { enabled: typeof source.enabled === "boolean" ? source.enabled : RUNNING_MARK_FALLBACK };
+		}
+		function emitRunningConfig(input) {
+			runningConfig = normalizeRunningConfig(input);
+			runningConfigListeners.forEach((fn) => { try { fn(runningConfig); } catch {} });
+		}
+		function subscribeRunningConfig(fn) {
+			runningConfigListeners.add(fn);
+			return () => { runningConfigListeners.delete(fn); };
 		}
 
 		/**
@@ -748,6 +789,84 @@ window.__ModuleLoader__.load({
 		}
 
 		//#endregion
+		//#region running state
+		// The "who is running right now" fact is entirely OFFICIAL and entirely
+		// free: the browser's session list already carries each session's
+		// `running` (host `ctx.agents.get(id)?.status === 'running'`, pushed by
+		// `api-session/status`), and the official session row already draws its own
+		// grey spinner from it. This plugin adds no host plumbing, no projection
+		// and no storage — it only projects the same fact as a YELLOW mark in four
+		// places. See docs/adr/0010-running-mark-is-a-second-projection.md.
+		/**
+		 * The sessions that are running right now.
+		 *
+		 * Two official facts are combined, in the shipped sidebar's own precedence:
+		 *   * running — `status.get(id)?.running`, falling back to the row's own
+		 *     `running` exactly like ui-workspace's `sessionNode` does;
+		 *   * waiting — a `pendingInteraction` makes the official row show the amber
+		 *     "waiting for approval / answer / plan review" instead of the spinner,
+		 *     so it is NOT running here either. That is why a session with the
+		 *     amber dot never also gets a yellow one.
+		 *
+		 * Sub-agent sessions are skipped for the same reason `collectUnread` skips
+		 * them: they are not part of the browsing the user does (ui-workspace's
+		 * `sessionVisible` hides them outright), so counting them would leave the
+		 * mark lit by work nobody can open.
+		 * @param list - the session list snapshot (may be absent).
+		 * @param status - the official session-status map (may be absent).
+		 * @returns the running session ids, in list order.
+		 */
+		function runningSessionIds(list, status) {
+			const out = [];
+			if (list === null || typeof list !== "object") return out;
+			const byId = list.byId !== null && typeof list.byId === "object" ? list.byId : {};
+			const order = Array.isArray(list.ids) ? list.ids : Object.keys(byId);
+			const lookup = status !== null && status !== undefined && typeof status.get === "function"
+				? (id) => status.get(id)
+				: () => undefined;
+			for (const id of order) {
+				if (typeof id !== "string" || id === "") continue;
+				const entry = byId[id];
+				if (entry === null || typeof entry !== "object") continue;
+				if (entry.origin === "subagent") continue;
+				const row = lookup(id);
+				const known = row !== null && typeof row === "object";
+				if (known && row.pendingInteraction !== null && row.pendingInteraction !== undefined) continue;
+				const running = known && typeof row.running === "boolean" ? row.running : entry.running;
+				if (running !== true) continue;
+				out.push(id);
+			}
+			return out;
+		}
+
+		/**
+		 * Roll the running sessions up to one count per workspace.
+		 *
+		 * Mirrors `dotsFromItems`: the ID anchors the number to the workspace row
+		 * the browser itself keys (`data-row-key="workspace:<id>"`), the title is
+		 * what the row displays, and a session whose workspace cannot be named is
+		 * dropped rather than guessed at. Pure, so a test can drive it directly.
+		 * @param ids - running session ids, from `runningSessionIds`.
+		 * @param owners - sessionId → `{ id, title }` from the official workspace snapshot.
+		 * @returns `[{ id, name, count }]`, busiest workspace first.
+		 */
+		function runningWorkspaceDots(ids, owners) {
+			const counts = new Map();
+			for (const id of Array.isArray(ids) ? ids : []) {
+				if (typeof id !== "string" || id === "") continue;
+				const owner = owners !== null && typeof owners === "object" ? owners[id] : undefined;
+				const workspaceId = owner !== null && typeof owner === "object" && typeof owner.id === "string" ? owner.id : "";
+				if (workspaceId === "") continue;
+				const title = typeof owner.title === "string" ? owner.title : "";
+				const existing = counts.get(workspaceId);
+				if (existing === undefined) counts.set(workspaceId, { id: workspaceId, name: title, count: 1 });
+				else existing.count++;
+			}
+			return [...counts.values()]
+				.sort((a, b) => b.count - a.count || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+		}
+
+		//#endregion
 		//#region badge bridge
 		// In-package badge bridge. Two number sources:
 		//   "real"   — DSH's own pending-interaction registry (the same source the
@@ -760,6 +879,14 @@ window.__ModuleLoader__.load({
 		let realCount = 0;
 		/** The sessions behind `realCount`, for the sidebar list (newest first). */
 		let realItems = [];
+		/**
+		 * How many sessions are running right now — the official `running` fact,
+		 * already folded by `runningSessionIds`. It rides the SAME bridge as the
+		 * unread number because it has the same two consumers (the brand mark and
+		 * the tab icon) and the two must never disagree about which of them is
+		 * being shown.
+		 */
+		let runningTotal = 0;
 		let manualCount = 0;
 		let badgeSize = "md";
 		const badgeListeners = new Set();
@@ -771,7 +898,7 @@ window.__ModuleLoader__.load({
 			return badgeSource === "manual" ? manualCount : realCount;
 		}
 		function badgeSnapshot() {
-			return { count: effectiveCount(), size: badgeSize, source: badgeSource, items: badgeSource === "manual" ? [] : realItems };
+			return { count: effectiveCount(), size: badgeSize, source: badgeSource, items: badgeSource === "manual" ? [] : realItems, running: runningTotal };
 		}
 		function notifyBadge() {
 			const snapshot = badgeSnapshot();
@@ -791,6 +918,22 @@ window.__ModuleLoader__.load({
 		function emitRealBadge(value, items) {
 			realCount = normalizeCount(value);
 			realItems = Array.isArray(items) ? items : [];
+			notifyBadge();
+		}
+		/**
+		 * The running sessions, as one number on the same bridge.
+		 *
+		 * Emitted from every render of the headless badge source, so the "did it
+		 * actually change" guard is what keeps a re-render from repainting the tab
+		 * icon and the brand mark for nothing. It is NOT routed through
+		 * `emitRealBadge`: the unread number and the running number are independent
+		 * facts, and a manual test number must not disturb the other.
+		 * @param value - how many sessions are running; anything non-positive is 0.
+		 */
+		function emitRunningState(value) {
+			const next = normalizeCount(value);
+			if (next === runningTotal) return;
+			runningTotal = next;
 			notifyBadge();
 		}
 		function emitBadgeSize(value) {
@@ -1301,6 +1444,58 @@ window.__ModuleLoader__.load({
 			c2d.fillText(text, cx, cy + size * 0.01);
 			c2d.restore();
 		}
+		/**
+		 * The common badge scale when BOTH tab-icon numbers are shown.
+		 *
+		 * A big red "2" beside a small yellow "1" reads as a rendering bug, so the
+		 * two pills share one size: the largest that fits them stacked inside the
+		 * canvas (four half-heights + the edge pads + the seam between them). The
+		 * constraint is absolute — it is the canvas that is small, not the setting —
+		 * so this returns a SCALE multiplier the caller folds into the normal one,
+		 * and a pill drawn alone keeps whatever size the setting asks for.
+		 * @param scale - the badge-size multiplier from the setting.
+		 * @returns a multiplier ≤ 1 to apply to it.
+		 */
+		function faviconBadgeFitScale(scale) {
+			const k = typeof scale === "number" && scale > 0 ? scale : 1;
+			// 0.205: four half-heights plus both white rings plus a seam, inside the
+			// canvas. Anything larger and the two rings merge into one blob.
+			return Math.min(1, 0.205 / (0.28 * k));
+		}
+		/**
+		 * The yellow "N running" badge on the tab icon: bottom-right.
+		 *
+		 * Mirrors `drawFaviconBadge` exactly — same geometry, same white ring, same
+		 * digit size for the same `scale` — so the two numbers can sit one above the
+		 * other as equals. Dark digits, because yellow needs dark ink.
+		 * @param c2d - the tab-icon canvas context.
+		 * @param size - canvas edge in px.
+		 * @param count - how many sessions are running.
+		 * @param scale - the badge-size multiplier (already fitted when paired).
+		 */
+		function drawFaviconRunningBadge(c2d, size, count, scale) {
+			const text = badgeLabel(count);
+			const r = size * 0.28 * (scale || 1);
+			const wide = text.length > 1;
+			const w = wide ? r * 2 + size * 0.16 * (text.length - 1) : r * 2;
+			const h = r * 2;
+			const cx = size - w / 2 - size * 0.02;
+			const cy = size - h / 2 - size * 0.02;
+			c2d.save();
+			// White ring so the badge stays readable on any base artwork.
+			c2d.fillStyle = "#ffffff";
+			roundRect(c2d, cx - w / 2 - size * 0.03, cy - h / 2 - size * 0.03, w + size * 0.06, h + size * 0.06);
+			c2d.fill();
+			c2d.fillStyle = RUNNING_YELLOW;
+			roundRect(c2d, cx - w / 2, cy - h / 2, w, h);
+			c2d.fill();
+			c2d.fillStyle = "#1f1f1f";
+			c2d.font = `700 ${Math.round(h * (wide ? 0.56 : 0.68))}px system-ui, -apple-system, sans-serif`;
+			c2d.textAlign = "center";
+			c2d.textBaseline = "middle";
+			c2d.fillText(text, cx, cy + size * 0.01);
+			c2d.restore();
+		}
 		function loadIconImage(href) {
 			return new Promise((resolve, reject) => {
 				const img = new Image();
@@ -1311,7 +1506,10 @@ window.__ModuleLoader__.load({
 		}
 		async function applyBadgeToFavicon(count, size) {
 			const base = desiredIconHref();
-			if (count <= 0) {
+			// Two independent marks ride one composite, so "nothing to draw" means
+			// neither of them is wanted — not merely "no unread".
+			const running = runningTotal > 0;
+			if (count <= 0 && !running) {
 				// No badge to draw. With a custom icon active the page must carry it on
 				// EVERY link (a stale scheme-specific sibling outranks the one we set);
 				// with none, the shipped dark/light pair goes back untouched — the
@@ -1339,8 +1537,13 @@ window.__ModuleLoader__.load({
 				const dw = iw * scale;
 				const dh = ih * scale;
 				c2d.drawImage(img, (FAVICON_SIZE - dw) / 2, (FAVICON_SIZE - dh) / 2, dw, dh);
-				drawFaviconBadge(c2d, FAVICON_SIZE, count, badgeScale(size));
-				setIconEverywhere(canvas.toDataURL("image/png"), "image/png");
+				// One size for both numbers: when they share the tab icon they shrink
+				// together to the largest pair that fits, so neither reads as a bug and
+				// the two can never overlap.
+				const badgeUnit = badgeScale(size);
+				const badgeK = count > 0 && running ? badgeUnit * faviconBadgeFitScale(badgeUnit) : badgeUnit;
+				if (count > 0) drawFaviconBadge(c2d, FAVICON_SIZE, count, badgeK);
+				if (running) drawFaviconRunningBadge(c2d, FAVICON_SIZE, runningTotal, badgeK);				setIconEverywhere(canvas.toDataURL("image/png"), "image/png");
 			} catch (error) {
 				// Never silent: a failure here is invisible in the UI (the tab simply
 				// keeps its previous icon), which once cost a whole debugging session.
@@ -1396,7 +1599,7 @@ window.__ModuleLoader__.load({
 			// stale sibling is exactly what used to outrank the icon we set.
 			const hrefs = iconLinks().map((candidate) => candidate.getAttribute("href"));
 			const ours = hrefs.length > 0 && hrefs.every((value) => typeof value === "string" && value.slice(0, 5) === "data:");
-			if (effectiveCount() <= 0) {
+			if (effectiveCount() <= 0 && runningTotal <= 0) {
 				// Carries the custom icon, or puts the shipped pair back. Both writers
 				// only touch a link that actually differs, so this stays a no-op once
 				// the page is correct and cannot re-arm the head observer.
@@ -1609,6 +1812,18 @@ window.__ModuleLoader__.load({
 		 */
 		const WS_DOT_ATTR = "data-icon-custom-wsdot";
 		const ROW_DOT_ATTR = "data-icon-custom-rowdot";
+		/** The running mark's two shapes: a dot after a session title (and on a folder icon), plus the header count. */
+		const RUN_DOT_ATTR = "data-icon-custom-rundot";
+		const RUN_WS_ATTR = "data-icon-custom-runws";
+		/**
+		 * How far the folder icon's red dot steps left when the yellow dot joins it.
+		 *
+		 * An 8px dot plus a 2px seam: the pair then still sits over the icon's right
+		 * half instead of one of them hanging off into the workspace name. The red
+		 * steps back the moment the yellow is gone, so the unread marker keeps its
+		 * old place whenever it is alone.
+		 */
+		const WS_DOT_PAIR_SHIFT = 10;
 		const WS_ROW_MIN_H = 18;
 		const WS_ROW_MAX_H = 56;
 		const WS_ROW_MIN_W = 80;
@@ -1616,6 +1831,10 @@ window.__ModuleLoader__.load({
 		let workspaceDots = [];
 		/** One entry per unread session: `{ id, title }`, matched against the row title. */
 		let sessionDots = [];
+		/** One entry per RUNNING session: `{ id, title }` — same shape, same row handle. */
+		let runningSessionDots = [];
+		/** One entry per workspace with running sessions: `{ id, name, count }`. */
+		let runningWorkspaceMarks = [];
 		let workspaceDotFailures = 0;
 		let workspaceDotGivenUp = false;
 		let workspaceDotPainting = false;
@@ -1630,6 +1849,11 @@ window.__ModuleLoader__.load({
 			const next = marks !== null && typeof marks === "object" ? marks : {};
 			workspaceDots = Array.isArray(next.workspaces) ? next.workspaces : [];
 			sessionDots = Array.isArray(next.sessions) ? next.sessions : [];
+			// The running marks ride the same store and the same paint pass as the
+			// unread ones, but they are a different feature: they carry their own
+			// arrays, and whichever switch is off empties only its own.
+			runningSessionDots = Array.isArray(next.runningSessions) ? next.runningSessions : [];
+			runningWorkspaceMarks = Array.isArray(next.runningWorkspaces) ? next.runningWorkspaces : [];
 			workspaceDotListeners.forEach((fn) => { try { fn(); } catch {} });
 		}
 		function subscribeSidebarMarks(fn) {
@@ -1643,7 +1867,7 @@ window.__ModuleLoader__.load({
 				|| null;
 		}
 		function clearWorkspaceDots() {
-			try { document.querySelectorAll("[" + WS_DOT_ATTR + "],[" + ROW_DOT_ATTR + "]").forEach((node) => node.remove()); } catch {}
+			try { document.querySelectorAll("[" + WS_DOT_ATTR + "],[" + ROW_DOT_ATTR + "],[" + RUN_DOT_ATTR + "],[" + RUN_WS_ATTR + "]").forEach((node) => node.remove()); } catch {}
 			for (const entry of workspaceDotRestores) { try { entry.el.style.position = entry.position; } catch {} }
 			workspaceDotRestores = [];
 		}
@@ -1846,6 +2070,11 @@ window.__ModuleLoader__.load({
 			const enabled = unreadConfig.workspaceDot !== false;
 			const wanted = enabled ? workspaceDots : [];
 			const wantedRows = enabled ? sessionDots : [];
+			// A separate switch for a separate feature: the running marks keep working
+			// when the unread dots are turned off, and vice versa.
+			const runningEnabled = runningConfig.enabled !== false;
+			const wantedRunningRows = runningEnabled ? runningSessionDots : [];
+			const wantedRunningMarks = runningEnabled ? runningWorkspaceMarks : [];
 			const container = workspaceDotContainer();
 			workspaceDotPainting = true;
 			workspaceDotPaintedAt = Date.now();
@@ -1858,11 +2087,19 @@ window.__ModuleLoader__.load({
 				// matched twice for a moment) can no longer blink an existing dot away.
 				const wantedNames = new Set(wanted.map((entry) => workspaceDotKey(entry)));
 				const wantedIds = new Set(wantedRows.map((entry) => entry.id));
+				const wantedRunningIds = new Set(wantedRunningRows.map((entry) => entry.id));
+				const wantedRunningNames = new Set(wantedRunningMarks.map((entry) => workspaceDotKey(entry)));
 				document.querySelectorAll("[" + WS_DOT_ATTR + "]").forEach((node) => {
 					if (!node.isConnected || !wantedNames.has(node.getAttribute(WS_DOT_ATTR))) node.remove();
 				});
 				document.querySelectorAll("[" + ROW_DOT_ATTR + "]").forEach((node) => {
 					if (!node.isConnected || !wantedIds.has(node.getAttribute(ROW_DOT_ATTR))) node.remove();
+				});
+				document.querySelectorAll("[" + RUN_DOT_ATTR + "]").forEach((node) => {
+					if (!node.isConnected || !wantedRunningIds.has(node.getAttribute(RUN_DOT_ATTR))) node.remove();
+				});
+				document.querySelectorAll("[" + RUN_WS_ATTR + "]").forEach((node) => {
+					if (!node.isConnected || !wantedRunningNames.has(node.getAttribute(RUN_WS_ATTR))) node.remove();
 				});
 				if (container === null) { workspaceDotPainting = false; return; } // start-up race
 				const legacyTitleMatch = !sessionRowKeysInUse(container);
@@ -1879,7 +2116,6 @@ window.__ModuleLoader__.load({
 					}
 					if (target === null) { missed++; continue; }
 					const row = target.row;
-					if (existingMarker(row, WS_DOT_ATTR, key) !== null) { placed++; continue; }
 					const icon = target.icon;
 					const rowRect = row.getBoundingClientRect();
 					const anchorRect = icon.getBoundingClientRect();
@@ -1887,24 +2123,95 @@ window.__ModuleLoader__.load({
 						workspaceDotRestores.push({ el: row, position: row.style.position });
 						row.style.position = "relative";
 					}
+					// "Left red, right yellow": the yellow takes the corner this dot has
+					// always used, and the red steps one dot to the left while the pair is
+					// together (and steps back the moment the yellow is gone).
+					const paired = existingMarker(row, RUN_WS_ATTR, key) !== null;
+					const left = Math.round(anchorRect.right - rowRect.left - 4 - (paired ? WS_DOT_PAIR_SHIFT : 0));
+					const top = Math.round(anchorRect.top - rowRect.top - 3);
+					const existingDot = existingMarker(row, WS_DOT_ATTR, key);
+					if (existingDot !== null) {
+						if (existingDot.style.left !== left + "px") existingDot.style.left = left + "px";
+						if (existingDot.style.top !== top + "px") existingDot.style.top = top + "px";
+						placed++;
+						continue;
+					}
 					const dot = document.createElement("span");
 					dot.setAttribute(WS_DOT_ATTR, key);
 					dot.setAttribute("aria-hidden", "true");
 					dot.title = (typeof entry.name === "string" && entry.name !== "" ? entry.name : key) + " · " + entry.count;
 					dot.style.cssText = "position:absolute;pointer-events:none;width:8px;height:8px;border-radius:50%;"
-						+ "background:#e5484d;box-shadow:0 0 0 1.5px var(--dsw-alias-bg-layer-1,#fff);"
-						+ "left:" + Math.round(anchorRect.right - rowRect.left - 4) + "px;"
-						+ "top:" + Math.round(anchorRect.top - rowRect.top - 3) + "px;";
+						+ "background:#e5484d;box-shadow:0 0 0 1.5px var(--dsw-alias-bg-layer-1,#fff);";
+					dot.style.left = left + "px";
+					dot.style.top = top + "px";
 					row.appendChild(dot);
 					placed++;
 					created++;
 				}
-				// Session rows: the marker rides inline right after the title, so it stays
-				// beside the name whatever the timestamp happens to say.
+				// Workspace rows: the running mark is a yellow DOT on the folder icon
+				// (the count lives in the section header, where a number is readable).
+				// "Left red, right yellow": the yellow takes the corner the red has
+				// always used and the red steps aside by exactly one dot.
+				for (const entry of wantedRunningMarks) {
+					const key = workspaceDotKey(entry);
+					if (key === undefined) { missed++; continue; }
+					const keyedRow = workspaceRowElement(container, entry.id);
+					const target = keyedRow === null ? null : folderTargetFor(keyedRow);
+					if (target === null) { missed++; continue; }
+					const row = target.row;
+					const runDot = existingMarker(row, RUN_WS_ATTR, key);
+					const icon = target.icon;
+					const rowRect = row.getBoundingClientRect();
+					const anchorRect = icon.getBoundingClientRect();
+					if (window.getComputedStyle(row).position === "static") {
+						workspaceDotRestores.push({ el: row, position: row.style.position });
+						row.style.position = "relative";
+					}
+					const corner = Math.round(anchorRect.right - rowRect.left - 4);
+					const top = Math.round(anchorRect.top - rowRect.top - 3);
+					// The red keeps the pair's LEFT seat. It is nudged here as well as in
+					// its own loop because on the first paint it cannot see a yellow that
+					// does not exist yet — both places compute the same number, so the
+					// pair never oscillates.
+					const red = existingMarker(row, WS_DOT_ATTR, key);
+					if (red !== null) {
+						const redLeft = corner - WS_DOT_PAIR_SHIFT;
+						if (red.style.left !== redLeft + "px") red.style.left = redLeft + "px";
+						if (red.style.top !== top + "px") red.style.top = top + "px";
+					}
+					if (runDot !== null) {
+						if (runDot.style.left !== corner + "px") runDot.style.left = corner + "px";
+						if (runDot.style.top !== top + "px") runDot.style.top = top + "px";
+						placed++;
+						continue;
+					}
+					const mark = document.createElement("span");
+					mark.setAttribute(RUN_WS_ATTR, key);
+					mark.setAttribute("aria-hidden", "true");
+					mark.title = (entry.name !== "" ? entry.name : key) + " · " + entry.count;
+					mark.style.cssText = "position:absolute;pointer-events:none;width:8px;height:8px;border-radius:50%;"
+						+ "background:" + RUNNING_YELLOW + ";box-shadow:0 0 0 1.5px var(--dsw-alias-bg-layer-1,#fff);";
+					mark.style.left = corner + "px";
+					mark.style.top = top + "px";
+					row.appendChild(mark);
+					placed++;
+					created++;
+				}
+				// Session rows: RED first, then YELLOW — "left red, right yellow", and a
+				// fixed order no matter which of the two features changed last.
 				for (const entry of wantedRows) {
 					const target = sessionRowTarget(container, entry.id, entry.title, legacyTitleMatch);
 					if (target === null) { missed++; continue; }
-					if (existingMarker(target.row, ROW_DOT_ATTR, entry.id) !== null) { placed++; continue; }
+					const existing = existingMarker(target.row, ROW_DOT_ATTR, entry.id);
+					if (existing !== null) {
+						// Both markers can survive a repaint; keep the red in front of the
+						// yellow (a red painted while the yellow was gone would otherwise
+						// stay glued to the title).
+						const runDot = existingMarker(target.row, RUN_DOT_ATTR, entry.id);
+						if (runDot !== null && existing.nextElementSibling !== runDot) existing.insertAdjacentElement("afterend", runDot);
+						placed++;
+						continue;
+					}
 					const dot = document.createElement("span");
 					dot.setAttribute(ROW_DOT_ATTR, entry.id);
 					dot.setAttribute("aria-hidden", "true");
@@ -1912,8 +2219,24 @@ window.__ModuleLoader__.load({
 					// Tight to the title on the left, and kept off the timestamp on the
 					// right: with no right margin the dot reads as part of "24 分钟".
 					dot.style.cssText = "pointer-events:none;flex:none;width:8px;height:8px;border-radius:50%;"
-						+ "background:#e5484d;margin:0 4px 0 6px;";
+						+ "background:#e5484d;margin:0 5px 0 6px;";
 					target.title.insertAdjacentElement("afterend", dot);
+					placed++;
+					created++;
+				}
+				for (const entry of wantedRunningRows) {
+					const target = sessionRowTarget(container, entry.id, entry.title, legacyTitleMatch);
+					if (target === null) { missed++; continue; }
+					if (existingMarker(target.row, RUN_DOT_ATTR, entry.id) !== null) { placed++; continue; }
+					const runDot = document.createElement("span");
+					runDot.setAttribute(RUN_DOT_ATTR, entry.id);
+					runDot.setAttribute("aria-hidden", "true");
+					runDot.title = entry.title;
+					runDot.style.cssText = "pointer-events:none;flex:none;width:8px;height:8px;border-radius:50%;"
+						+ "background:" + RUNNING_YELLOW + ";margin:0 4px 0 0;";
+					const red = existingMarker(target.row, ROW_DOT_ATTR, entry.id);
+					if (red !== null) red.insertAdjacentElement("afterend", runDot);
+					else target.title.insertAdjacentElement("afterend", runDot);
 					placed++;
 					created++;
 				}
@@ -1975,6 +2298,10 @@ window.__ModuleLoader__.load({
 			const workspaces = typeof props.useWorkspaces === "function" ? props.useWorkspaces((state) => state) : undefined;
 			const [config, setConfig] = React.useState(unreadConfig);
 			React.useEffect(() => subscribeUnreadConfig(setConfig), []);
+			// The running mark's own switch. Same shape, separate feature: the two
+			// never share state, so one switch can never move the other's marks.
+			const [running, setRunning] = React.useState(runningConfig);
+			React.useEffect(() => subscribeRunningConfig(setRunning), []);
 			// Baseline new sessions; persists only when it actually learns something.
 			React.useEffect(() => {
 				const ids = list !== null && typeof list === "object" && Array.isArray(list.ids) ? list.ids : [];
@@ -2079,24 +2406,49 @@ window.__ModuleLoader__.load({
 				};
 			}, [staySignature, delayMs, watching]);
 			React.useEffect(() => { emitRealBadge(count, items); }, [count, items]);
+			// The running fact, straight off the same two official props and with no
+			// host round trip at all. `runningSignature` is what the marks effect below
+			// depends on, so a list re-render with the same set of running sessions
+			// does not repaint the sidebar.
+			const runningIds = running.enabled === false ? [] : runningSessionIds(list, status);
+			const runningSignature = runningIds.join("|");
+			const runningCount = runningIds.length;
+			React.useEffect(() => { emitRunningState(runningCount); }, [runningCount]);
+			/**
+			 * One session's displayed title, the way the sidebar shows it.
+			 *
+			 * Kept in step with `collectUnread`'s own `titleOf`: the yellow dot is
+			 * matched against the row's rendered text, so it must use the same
+			 * `displayTitle` fallback the red dot uses, or a session whose generated
+			 * title has not landed yet would get no yellow dot at all.
+			 */
+			const titleOf = (id, entry) => (entry !== null && typeof entry === "object" && typeof entry.displayTitle === "string" && entry.displayTitle !== "" ? entry.displayTitle : id);
 			// Map session → its Workspace from the official snapshot: the ID anchors the
 			// folder dot to the keyed row, the title is what the row displays (not always
 			// the cwd basename, and not always equal to the stored title either).
 			React.useEffect(() => {
 				const owners = {};
-				const list = workspaces !== null && typeof workspaces === "object" && Array.isArray(workspaces.items) ? workspaces.items : [];
-				for (const workspace of list) {
+				const workspaceItems = workspaces !== null && typeof workspaces === "object" && Array.isArray(workspaces.items) ? workspaces.items : [];
+				for (const workspace of workspaceItems) {
 					if (workspace === null || typeof workspace !== "object") continue;
 					if (!Array.isArray(workspace.sessionIds)) continue;
 					const id = typeof workspace.workspaceId === "string" ? workspace.workspaceId : "";
 					const title = typeof workspace.title === "string" ? workspace.title : "";
 					for (const sessionId of workspace.sessionIds) owners[sessionId] = { id, title };
 				}
+				// The session rows, for naming the running ones the way the sidebar shows
+				// them (`displayTitle`, the same fallback the red dots use).
+				const byId = list !== null && typeof list === "object" && list.byId !== null && typeof list.byId === "object" ? list.byId : {};
 				emitSidebarMarks({
 					workspaces: dotsFromItems(items, owners),
-					sessions: items.map((item) => ({ id: item.id, title: item.title }))
+					sessions: items.map((item) => ({ id: item.id, title: item.title })),
+					// The same rows, the other fact. Both arrays travel together, so the
+					// paint pass can put the yellow dot in front of the red one
+					// deterministically instead of depending on which feature changed last.
+					runningSessions: runningIds.map((id) => ({ id, title: titleOf(id, byId[id]) })),
+					runningWorkspaces: runningWorkspaceDots(runningIds, owners)
 				});
-			}, [items, workspaces]);
+			}, [items, workspaces, runningSignature, running]);
 			return null;
 		}
 
@@ -2123,6 +2475,8 @@ window.__ModuleLoader__.load({
 		 * the old sidebar-foot button is gone.
 		 */
 		const HEAD_BADGE_ATTR = "data-icon-custom-unreadbadge";
+		/** The running count's own node in the same header row — bottom-right of the label. */
+		const HEAD_RUN_ATTR = "data-icon-custom-runbadge";
 		const HEAD_BADGE_STYLE_ID = "dsh-icon-custom-unreadbadge-css";
 		const HEAD_BADGE_WIRED = "data-icon-custom-unreadbadge-wired";
 		const HEAD_BADGE_MAX_FAILURES = 40;
@@ -2130,6 +2484,8 @@ window.__ModuleLoader__.load({
 		const HEAD_BADGE_MAX_STEPS = 6;
 		/** Raise above the label's top edge; the header only leaves 8px of headroom. */
 		const HEAD_BADGE_RAISE = 7;
+		/** Drop below the label's bottom edge; mirrors the raise, and still fits the 36px header. */
+		const HEAD_RUN_DROP = 8;
 		/** Overhang past the label's right edge. */
 		const HEAD_BADGE_OVERHANG = 9;
 		let headerBadgeHost = null;
@@ -2157,7 +2513,10 @@ window.__ModuleLoader__.load({
 			`[${HEAD_BADGE_ATTR}]{position:absolute;display:none;align-items:center;justify-content:center;min-width:15px;height:15px;padding:0 3.5px;box-sizing:border-box;border:0;border-radius:999px;background:#e5484d;color:#fff;font:inherit;font-size:9.5px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em;cursor:pointer;z-index:3;box-shadow:0 0 0 1.5px var(--dsw-specific-sidebar-fill,#fff)}`,
 			`[${HEAD_BADGE_ATTR}]::after{content:"";position:absolute;inset:0 -5px -5px -5px;border-radius:999px}`,
 			`[${HEAD_BADGE_ATTR}]:hover{filter:brightness(1.12)}`,
-			`[${HEAD_BADGE_ATTR}][data-zero="1"]{background:var(--dsw-alias-state-idle-primary,#b6bcc4)}`
+			`[${HEAD_BADGE_ATTR}][data-zero="1"]{background:var(--dsw-alias-state-idle-primary,#b6bcc4)}`,
+			// The running count: same pill, other corner, not interactive. It has no
+			// zero state — a yellow 0 would be pure noise — so it is shown or hidden.
+			`[${HEAD_RUN_ATTR}]{position:absolute;display:none;align-items:center;justify-content:center;min-width:15px;height:15px;padding:0 3.5px;box-sizing:border-box;border:0;border-radius:999px;background:${RUNNING_YELLOW};color:#1f1f1f;font:inherit;font-size:9.5px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em;pointer-events:none;z-index:3;box-shadow:0 0 0 1.5px var(--dsw-specific-sidebar-fill,#fff)}`
 		].join("");
 
 		/** Install the badge rules once per page. */
@@ -2184,11 +2543,13 @@ window.__ModuleLoader__.load({
 		 * @returns `{ row, label }`, or null when this build's DOM is not recognised.
 		 */
 		function sectionHeaderParts(container) {
-			// Our own badge is a button too; never let it stand in for the search
-			// control, or the row anchor would resolve to the wrong element.
+			// Our own nodes are never a stand-in for shipped controls or for the label:
+			// the red badge is a button and the yellow one carries text, so either could
+			// be mistaken for the search control or the label if left in the running.
 			let firstButton = null;
 			for (const candidate of container.querySelectorAll("button")) {
 				if (candidate.getAttribute(HEAD_BADGE_ATTR) !== null) continue;
+				if (candidate.getAttribute(HEAD_RUN_ATTR) !== null) continue;
 				firstButton = candidate;
 				break;
 			}
@@ -2198,6 +2559,8 @@ window.__ModuleLoader__.load({
 				for (const child of row.children) {
 					if (child === firstButton || child.contains(firstButton)) continue;
 					if (child.tagName === "BUTTON") continue;
+					if (child.getAttribute(HEAD_BADGE_ATTR) !== null) continue;
+					if (child.getAttribute(HEAD_RUN_ATTR) !== null) continue;
 					if (child.querySelector("button") !== null) continue;
 					if ((child.textContent ?? "").trim() !== "") return { row, label: child };
 				}
@@ -2277,6 +2640,24 @@ window.__ModuleLoader__.load({
 				}
 			}
 			if (node.textContent !== text) node.textContent = text;
+			// The running count, in the same row's other corner: top-right is the unread
+			// number (where it has always been), bottom-right is this one.
+			let runNode = row.querySelector(`[${HEAD_RUN_ATTR}]`);
+			if (runNode === null) {
+				runNode = document.createElement("span");
+				runNode.setAttribute(HEAD_RUN_ATTR, "1");
+				row.appendChild(runNode);
+			}
+			const running = normalizeCount(runningTotal);
+			const runText = badgeLabel(running);
+			if (typeof badgeT === "function") {
+				const spoken = badgeT("runningMarkCount").replace("{n}", String(running));
+				if (runNode.getAttribute("aria-label") !== spoken) {
+					runNode.setAttribute("aria-label", spoken);
+					runNode.setAttribute("title", spoken);
+				}
+			}
+			if (runNode.textContent !== runText) runNode.textContent = runText;
 			// The label collapses to nothing while the search box is open; the badge
 			// has no meaning then, and the label's own visibility cannot hide it
 			// because it is a sibling.
@@ -2284,6 +2665,7 @@ window.__ModuleLoader__.load({
 			const labelRect = label.getBoundingClientRect();
 			if (labelRect.width < 8) {
 				if (node.style.display !== "none") node.style.display = "none";
+				if (runNode.style.display !== "none") runNode.style.display = "none";
 			} else {
 				const width = typeof node.offsetWidth === "number" && node.offsetWidth > 0 ? node.offsetWidth : 15;
 				const left = Math.round(labelRect.right - rowRect.left - width + HEAD_BADGE_OVERHANG);
@@ -2292,6 +2674,17 @@ window.__ModuleLoader__.load({
 				if (node.style.left !== `${left}px`) node.style.left = `${left}px`;
 				if (node.style.top !== `${top}px`) node.style.top = `${top}px`;
 				if (node.style.display !== "flex") node.style.display = "flex";
+				// No zero state for the running count: it simply is not there.
+				if (running <= 0) {
+					if (runNode.style.display !== "none") runNode.style.display = "none";
+				} else {
+					const runWidth = typeof runNode.offsetWidth === "number" && runNode.offsetWidth > 0 ? runNode.offsetWidth : 15;
+					const runLeft = Math.round(labelRect.right - rowRect.left - runWidth + HEAD_BADGE_OVERHANG);
+					const runTop = Math.round(labelRect.bottom - rowRect.top - HEAD_RUN_DROP);
+					if (runNode.style.left !== `${runLeft}px`) runNode.style.left = `${runLeft}px`;
+					if (runNode.style.top !== `${runTop}px`) runNode.style.top = `${runTop}px`;
+					if (runNode.style.display !== "flex") runNode.style.display = "flex";
+				}
 			}
 			// The label animates its own width; follow it instead of waiting for the
 			// next mutation, which a CSS transition never produces.
@@ -2305,7 +2698,7 @@ window.__ModuleLoader__.load({
 
 		/** Take the badge back out and restore the row's own positioning. */
 		function clearHeaderBadge() {
-			try { document.querySelectorAll(`[${HEAD_BADGE_ATTR}]`).forEach((node) => node.remove()); } catch {}
+			try { document.querySelectorAll(`[${HEAD_BADGE_ATTR}],[${HEAD_RUN_ATTR}]`).forEach((node) => node.remove()); } catch {}
 			if (headerBadgeObserver !== null) {
 				try { headerBadgeObserver.disconnect(); } catch {}
 				headerBadgeObserver = null;
@@ -2460,6 +2853,28 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
+		 * The two brand-mark pill sizes.
+		 *
+		 * A 24px mark cannot hold two full-size numbers, and drawing one big and one
+		 * small reads as a rendering bug rather than a design. So when BOTH are shown
+		 * they are drawn at one common edge — the largest that still fits them stacked
+		 * — while a pill shown alone keeps the normal size. Pure, so the rule is
+		 * testable without React.
+		 * @param size - the mark's edge in px.
+		 * @param scale - the badge-size multiplier from the setting.
+		 * @param hasUnread - whether the unread pill is shown.
+		 * @param hasRunning - whether the running pill is shown.
+		 * @returns `{ unread, running }` pill edges in px.
+		 */
+		function brandPillEdges(size, scale, hasUnread, hasRunning) {
+			const edge = Math.max(12, Math.round(size * 0.5 * scale));
+			if (hasUnread !== true || hasRunning !== true) return { unread: edge, running: edge };
+			// Half the mark each, minus the seam between them.
+			const shared = Math.max(9, Math.floor((size - 2) / 2));
+			return { unread: shared, running: shared };
+		}
+
+		/**
 		 * Sidebar brand-mark occupant (registered on the official
 		 * `sidebar.brand.mark` single seat). Shows the custom icon when the
 		 * logo option is on; otherwise falls back to the platform favicon mark
@@ -2490,15 +2905,18 @@ window.__ModuleLoader__.load({
 				alt: "",
 				style
 			});
-			// No badge: keep the exact original element (no wrapper, no layout risk).
-			if (badge.count <= 0) return img;
-			const edge = Math.max(12, Math.round(size * 0.5 * badgeScale(badge.size)));
-			const label = `${badgeLabel(badge.count)} pending (test)`;
-			return React.createElement("span", {
-				style: { position: "relative", display: "inline-flex", width: size, height: size, flex: "none" }
-			},
-				img,
-				React.createElement("span", {
+			// No mark at all: keep the exact original element (no wrapper, no layout risk).
+			const runningCount = normalizeCount(badge.running);
+			if (badge.count <= 0 && runningCount <= 0) return img;
+			// Two independent facts, two corners: the unread count owns the top-right
+			// (where it has always been), the running count takes the bottom-right.
+			const edges = brandPillEdges(size, badgeScale(badge.size), badge.count > 0, runningCount > 0);
+			const edge = edges.unread;
+			const children = [img];
+			if (badge.count > 0) {
+				const label = `${badgeLabel(badge.count)} pending (test)`;
+				children.push(React.createElement("span", {
+					key: "unread",
 					title: label,
 					"aria-label": label,
 					style: {
@@ -2522,8 +2940,43 @@ window.__ModuleLoader__.load({
 						fontVariantNumeric: "tabular-nums",
 						pointerEvents: "none"
 					}
-				}, badgeLabel(badge.count))
-			);
+				}, badgeLabel(badge.count)));
+			}
+			if (runningCount > 0) {
+				const label = `${badgeLabel(runningCount)} running`;
+				// Same edge as the unread pill whenever both are shown (see
+				// brandPillEdges): a big red beside a small yellow reads as broken.
+				const runEdge = edges.running;
+				children.push(React.createElement("span", {
+					key: "running",
+					title: label,
+					"aria-label": label,
+					style: {
+						position: "absolute",
+						bottom: 0,
+						right: 0,
+						minWidth: runEdge,
+						height: runEdge,
+						padding: "0 2px",
+						boxSizing: "border-box",
+						borderRadius: 999,
+						background: RUNNING_YELLOW,
+						color: "#1f1f1f",
+						border: "1.5px solid var(--dsw-alias-bg-layer-1, #fff)",
+						fontSize: Math.max(7, Math.round(runEdge * 0.62)),
+						fontWeight: 700,
+						lineHeight: 1,
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "center",
+						fontVariantNumeric: "tabular-nums",
+						pointerEvents: "none"
+					}
+				}, badgeLabel(runningCount)));
+			}
+			return React.createElement("span", {
+				style: { position: "relative", display: "inline-flex", width: size, height: size, flex: "none" }
+			}, children);
 		}
 
 		function FaviconSection(props) {
@@ -2540,6 +2993,10 @@ window.__ModuleLoader__.load({
 			const [badgeSourceValue, setBadgeSourceValue] = React.useState(badgeSource);
 			const [unread, setUnread] = React.useState(unreadConfig);
 			React.useEffect(() => subscribeUnreadConfig(setUnread), []);
+			// Its own switch and its own endpoint pair: the running marks must be
+			// switchable without touching the unread rule (see lib/running.js).
+			const [running, setRunning] = React.useState(runningConfig);
+			React.useEffect(() => subscribeRunningConfig(setRunning), []);
 			// Sampled when the section mounts, which is the moment the user is
 			// looking at it. It reports local facts only (see badgeCapabilityProbe).
 			const [appBadgeProbe] = React.useState(() => appBadgeEnv());
@@ -2655,6 +3112,19 @@ window.__ModuleLoader__.load({
 			const onAppBadgeToggle = React.useCallback((checked) => {
 				saveUnreadRule({ appBadge: checked });
 			}, [saveUnreadRule]);
+			// Same "one save path, merged onto the current config" discipline as the
+			// unread rule, on its own endpoint: enabling or disabling the yellow marks
+			// applies locally at once and is persisted for the next page load.
+			const saveRunningRule = React.useCallback((patch) => {
+				const next = normalizeRunningConfig({ ...runningConfig, ...patch });
+				emitRunningConfig(next);
+				rpc.call("/api", "iconCustom/setRunningRule", {
+					args: { request: { enabled: next.enabled } }
+				}).catch(() => {});
+			}, [rpc]);
+			const onRunningMarkToggle = React.useCallback((checked) => {
+				saveRunningRule({ enabled: checked });
+			}, [saveRunningRule]);
 			// Seconds you must stay in a session before it counts as read; 0 = as soon
 			// as you enter. Clamped by the shared normalizer, so a stray keystroke can
 			// never persist an absurd delay.
@@ -2889,6 +3359,7 @@ window.__ModuleLoader__.load({
 							style: { ...(badgeSizeValue === key ? style.btnPrimary : style.btn), padding: "4px 10px" }
 						}, t(key === "sm" ? "badgeSizeSmall" : key === "md" ? "badgeSizeMedium" : "badgeSizeLarge")))
 					),
+					React.createElement("div", { style: style.hint }, t("badgeSizeHint")),
 					React.createElement("div", { style: { marginTop: "12px" } },
 						React.createElement("div", { style: style.desc }, t("unreadReasonsLabel")),
 						React.createElement("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center" } },
@@ -2953,6 +3424,22 @@ window.__ModuleLoader__.load({
 					),
 					React.createElement("div", { style: style.hint }, t("badgeTestHint"))
 				),
+				// A second, independent feature in its own block: same settings page,
+				// same save discipline, different fact.
+				React.createElement("div", { style: { borderTop: "1px solid var(--dsw-alias-border-l2)", marginTop: "12px", paddingTop: "12px" } },
+					React.createElement("div", { style: style.label }, t("runningMarkSection")),
+					React.createElement("div", { style: { marginTop: "8px" } },
+						React.createElement("label", { style: { display: "inline-flex", alignItems: "center", gap: "6px", fontSize: 12, color: "var(--dsw-alias-label-primary)", cursor: "pointer" } },
+							React.createElement("input", {
+								type: "checkbox",
+								checked: running.enabled !== false,
+								onChange: (event) => onRunningMarkToggle(event.target.checked === true)
+							}),
+							React.createElement("span", null, t("runningMarkLabel"))
+						),
+						React.createElement("div", { style: style.hint }, t("runningMarkHint"))
+					)
+				),
 				notice ? React.createElement("div", { style: style.notice }, notice) : null,
 				error ? React.createElement("div", { style: style.error }, error) : null
 			);
@@ -2992,6 +3479,14 @@ window.__ModuleLoader__.load({
 					}
 					emitUnreadConfig(resp.value);
 					scheduleHostSync();
+				})
+				.catch(() => {});
+			// The running-mark switch rides its own endpoint, for the same reason it has
+			// its own file: a problem in either feature must not touch the other.
+			rpc.call("/api", "iconCustom/getRunningRule", { args: {} })
+				.then((resp) => {
+					if (resp === null || typeof resp !== "object" || resp.ok !== true) return;
+					emitRunningConfig(resp.value);
 				})
 				.catch(() => {});
 			// Keep "the last moment this browser was here" fresh, so an ending that
@@ -3168,12 +3663,17 @@ window.__ModuleLoader__.load({
 				if (!attach()) retry = window.setInterval(() => { if (attach()) window.clearInterval(retry); }, 1000);
 				const offDots = subscribeSidebarMarks(schedule);
 				const offConfig = subscribeUnreadConfig(schedule);
+				// The running marks ride the same paint pass, so their switch has to wake
+				// it too — otherwise turning it off would leave the marks until the next
+				// unrelated repaint.
+				const offRunning = subscribeRunningConfig(schedule);
 				return () => {
 					if (retry !== 0) window.clearInterval(retry);
 					if (workspaceDotVerify !== 0) { window.clearTimeout(workspaceDotVerify); workspaceDotVerify = 0; }
 					if (observer !== null) observer.disconnect();
 					offDots();
 					offConfig();
+					offRunning();
 					clearWorkspaceDots();
 					clearHeaderBadge();
 				};
