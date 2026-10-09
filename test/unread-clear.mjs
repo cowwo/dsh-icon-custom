@@ -59,7 +59,7 @@ function makeHelpers(document) {
 const helpers = makeHelpers(fakeDocument())
 
 // —— 3. BadgeSource 里那段真实的 effect(上弦 + 单次到点)——
-const effectBody = slice('const snapshot = stayLive.current.list !==', '}, [staySignature, delayMs]);', 'stay effect')
+const effectBody = slice('const snapshot = stayLive.current.list !==', '}, [staySignature, delayMs, watching]);', 'stay effect')
 
 const CONFIG = { reasons: { completed: true, error: true }, pending: true, workspaceDot: true, clearDelaySec: 5 }
 const HOST_END = 1790773769922          // 真实数据:某会话最后一次结束(宿主时钟)
@@ -118,19 +118,22 @@ function makeSim({ delaySec = 5, rows = [], browserBehindMs = 0 } = {}) {
   const sched = scheduler()
   const stayLive = { current: { list } }
   const stayArmed = { current: new Map() }
-  const run = new Function('staySignature', 'stayIds', 'delayMs', 'stayLive', 'stayArmed', 'seenState', 'noteSeen', 'saveSeenState', 'bumpStay', 'window', 'lastTurnEndAt', effectBody + '\nreturn undefined;')
+  const run = new Function('staySignature', 'stayIds', 'delayMs', 'watching', 'stayLive', 'stayArmed', 'seenState', 'noteSeen', 'saveSeenState', 'bumpStay', 'window', 'lastTurnEndAt', effectBody + '\nreturn undefined;')
   let cleanup = null
   let lastSig = null
+  let watching = true
+  let lastWatching = true
 
-  /** 一次渲染:只有"被看着的会话集合"变了才会拆掉旧计时器、重新上弦。 */
+  /** 一次渲染:要么"被看着的会话集合"变了(离开/进入),要么暂停/恢复变了,才重跑 effect。 */
   const render = () => {
     stayLive.current = { list }
     const stayIds = helpers.currentSessionIds(list).slice().sort()
     const sig = stayIds.join('|')
-    if (sig === lastSig) return
+    if (sig === lastSig && watching === lastWatching) return
     lastSig = sig
-    if (typeof cleanup === "function") cleanup()   // 空集合时 effect 提前返回,没有 cleanup
-    cleanup = run(sig, stayIds, delaySec * 1000, stayLive, stayArmed, api.seenState, api.noteSeen, api.saveSeenState, () => {}, sched.window, helpers.lastTurnEndAt)
+    lastWatching = watching
+    if (typeof cleanup === "function") cleanup()   // 空集合/暂停时 effect 提前返回,没有 cleanup
+    cleanup = run(sig, stayIds, delaySec * 1000, watching, stayLive, stayArmed, api.seenState, api.noteSeen, api.saveSeenState, () => {}, sched.window, helpers.lastTurnEndAt)
   }
 
   const sim = {
@@ -147,6 +150,11 @@ function makeSim({ delaySec = 5, rows = [], browserBehindMs = 0 } = {}) {
     red: (id) => helpers.collectUnread(list, null, config, api.seenState.seen).some((i) => i.id === id),
     count: () => helpers.collectUnread(list, null, config, api.seenState.seen).length,
     mark: (id) => api.seenState.seen[id],
+    /** 暂停/恢复:切标签页到后台、或切到「设置/插件」页。 */
+    setWatching(value) {
+      watching = value === true
+      render()
+    },
     restore: () => { globalThis.Date = RealDate }
   }
   return sim
@@ -198,6 +206,52 @@ scenario({ rows: [{ id: 'V', endAt: HOST_END }] }, (sim) => {
   sim.advance(200)
   check('切回来待满 5 秒:这一轮才算看过', sim.mark('V'), HOST_END + 60000)
   check('红点灭了', sim.red('V'), false)
+})
+
+console.log('— 暂停 ≠ 离开:切标签页/开面板只暂停,去别的会话才算离开 —')
+scenario({ rows: [{ id: 'A', endAt: HOST_END }] }, (sim) => {
+  sim.render()                         // 进入 A → 上弦(HOST_END)
+  // 还没待满就切到后台:暂停期间一秒都不许算
+  sim.setWatching(false)
+  sim.advance(120000)
+  check('后台期间不算停留(进入时那一轮还没被确认)', sim.mark('A'), REAL_WATERMARK)
+  sim.setWatching(true)
+  sim.advance(4900)
+  check('切回来 4.9 秒:还亮', sim.red('A'), true)
+  sim.advance(200)
+  check('切回来待满 5 秒:进入时那一轮才消', sim.red('A'), false)
+  sim.setEndAt('A', HOST_END + 60000)  // 你还在 A 里,它又跑完一轮
+  sim.render()
+  sim.advance(1000)
+  check('新结束的那一轮亮着', sim.red('A'), true)
+
+  // 切到别的浏览器标签页:只暂停
+  sim.setWatching(false)
+  sim.advance(120000)
+  check('后台期间不确认任何东西', sim.red('A'), true)
+  sim.setWatching(true)                // 切回来
+  sim.advance(6000)
+  check('切标签页再回来,红点仍然亮(不是"离开又进来")', sim.red('A'), true)
+  check('水位没有被推到新那一轮', sim.mark('A'), HOST_END)
+
+  // 切到「设置/插件」页:也只暂停
+  sim.setWatching(false)
+  sim.advance(1000)
+  sim.setWatching(true)
+  sim.advance(6000)
+  check('切到设置页再回来,红点仍然亮', sim.red('A'), true)
+
+  // 去别的会话:这才算离开
+  sim.view(['B'])
+  sim.render()
+  sim.advance(1000)
+  sim.view(['A'])
+  sim.render()
+  sim.advance(4900)
+  check('去别的会话再回来待 4.9 秒:还亮', sim.red('A'), true)
+  sim.advance(200)
+  check('待满 5 秒:这一轮才算看过', sim.mark('A'), HOST_END + 60000)
+  check('红点灭了', sim.red('A'), false)
 })
 
 console.log('— 停留不足就切走:不算看过 —')
@@ -282,8 +336,11 @@ console.log('— 水位存储 —')
   const { api } = makeStore({ 'dsh-icon-custom.unread-seen.v1': JSON.stringify(legacy) })
   check('读到 v1 先当浏览器域(等宿主样本)', api.seenState.domain, 'browser')
   api.noteHostClock(hostAt)
-  check('v1 的每会话水位整体平移进宿主域', api.seenState.seen.a - legacy.seen.a, 45000)
-  check('v1 的 lastActiveAt 同样平移', api.seenState.lastActiveAt - legacy.lastActiveAt, 45000)
+  // ±2ms:偏移是 `hostAt - Date.now()` 现算的,取 hostAt 与调用它之间可能跨毫秒
+  // (上一条用例已经吃过这个亏,这里同样不许把断言钉在整数上)。
+  const shifted = (value) => Math.abs(value - 45000) <= 2
+  check('v1 的每会话水位整体平移进宿主域', shifted(api.seenState.seen.a - legacy.seen.a), true)
+  check('v1 的 lastActiveAt 同样平移', shifted(api.seenState.lastActiveAt - legacy.lastActiveAt), true)
   check('迁移后域标记为 host', api.seenState.domain, 'host')
 }
 {
@@ -327,10 +384,12 @@ console.log('— 屏幕报表:谁在被看着,由页面说了算 —')
       'session-b': { id: 'session-b', retainedBy: { mainView: 1 } }
     }
   }
-  check('全局面板盖住对话时不看任何会话(修的就是这条)',
-    makeHelpers(fakeDocument()).currentSessionIds(list, { panelActive: true, visible: true, displayed: undefined }), [])
-  check('标签页隐藏时不看任何会话',
-    makeHelpers(fakeDocument({ hidden: true })).currentSessionIds(list, { panelActive: false, visible: false, displayed: 'session-a' }), [])
+  // 暂停信号(面板/后台)不再改变"在哪个会话上"——改了就会丢快照,回来就变成"重新进入"。
+  const base = makeHelpers(fakeDocument()).currentSessionIds(list, {})
+  check('切到全局面板不改变集合(面板只暂停,不是离开)',
+    makeHelpers(fakeDocument()).currentSessionIds(list, { panelActive: true, visible: true }), base)
+  check('标签页切到后台不改变集合(后台只暂停,不是离开)',
+    makeHelpers(fakeDocument()).currentSessionIds(list, { panelActive: false, visible: false }), base)
   check('屏幕上是哪个就只算哪个(残留保留不牵连)',
     makeHelpers(fakeDocument()).currentSessionIds(list, { panelActive: false, visible: true, displayed: 'session-b' }), ['session-b'])
   check('拿不到屏幕信号时退回保留计数(老行为不退化)',

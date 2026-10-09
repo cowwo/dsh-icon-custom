@@ -80,7 +80,7 @@ window.__ModuleLoader__.load({
 			badgeTestHint: "真实未读 = 有会话发生了上面勾选的情况、而且你还没看过它(打开该会话即视为已读)。你正开着的会话也算——窗口可能被最小化、页面可能切到后台,这里无从判断你在不在看,所以不做这个区分。只有子代理不计。手动模式:自己填数字试看效果。刷新页面后回到真实未读。",
 			clearDelayLabel: "进入会话后多久算已读:",
 			clearDelayUnit: "秒",
-			clearDelayHint: "填 0 = 进去就算已读(红点立即消失)。大于 0 时,你要在那个会话里连续待满这么多秒它才算看过:中途切走会清零重数,刷新页面也重新数。**计时只认\"你进入会话时已经存在的结束\"**——你人已经在里面的时候又跑完一轮,那一轮不算数:它会一直亮着,等你切走再进来才会清。上限 600 秒。**只有它真的显示在屏幕上、且标签页在前台时才算看过**:切到「插件/设置」页或把标签页切到后台都不算。已读记在宿主($DSH_HOME/custom-favicon/unread-seen.json):任何一台设备上看过,所有设备都不再提醒;浏览器那份只是缓存,清站点数据不会把已读丢回去。"
+			clearDelayHint: "填 0 = 进去就算已读(红点立即消失)。大于 0 时,你要在那个会话里连续待满这么多秒它才算看过:中途切走会清零重数,刷新页面也重新数。**计时只认\"你进入会话时已经存在的结束\"**——你人已经在里面的时候又跑完一轮,那一轮不算数:它会一直亮着,等你切走再进来才会清。上限 600 秒。**切到「插件/设置」页、或把标签页切到后台,都只是暂停计时,不会因此清掉红点**(它们不算离开);真正算离开的只有一件事:**去别的会话**。已读记在宿主($DSH_HOME/custom-favicon/unread-seen.json):任何一台设备上看过,所有设备都不再提醒;浏览器那份只是缓存,清站点数据不会把已读丢回去。"
 		};
 		const en = {
 			nav: "Favicon",
@@ -153,7 +153,7 @@ window.__ModuleLoader__.load({
 			badgeTestHint: "Real unread = a session ended for one of the checked reasons and you have not looked at it yet (opening a session marks it read). The session you are viewing counts too — the window may be minimised or the page in the background, so this half cannot tell whether you are looking, and does not pretend to. Only sub-agents never count. Manual = type a number to preview. Resets to Real on reload.",
 			clearDelayLabel: "Mark read after staying:",
 			clearDelayUnit: "seconds",
-			clearDelayHint: "0 = read as soon as you enter (the dot clears at once). Above 0 you must stay in that session for this many seconds before it counts as read: leaving it resets the clock, and so does a reload. The clock only ever covers **the ending that was already there when you entered** — a turn that finishes while you are sitting in the session does not count: it stays red until you leave and come back. Capped at 600 seconds. It only counts while that session is really on screen in the foreground tab: a settings or plugins page, or a tab in the background, is not \"being looked at\". Read state lives on the Host ($DSH_HOME/custom-favicon/unread-seen.json): read on any device means read on every device, and the browser's own copy is only a cache — clearing site data no longer throws it away."
+			clearDelayHint: "0 = read as soon as you enter (the dot clears at once). Above 0 you must stay in that session for this many seconds before it counts as read: leaving it resets the clock, and so does a reload. The clock only ever covers **the ending that was already there when you entered** — a turn that finishes while you are sitting in the session does not count: it stays red until you leave and come back. Capped at 600 seconds. A settings or plugins page, or a tab in the background, only **pauses** the clock — neither clears a dot (neither counts as leaving); the one thing that does count as leaving is **opening another session**. Read state lives on the Host ($DSH_HOME/custom-favicon/unread-seen.json): read on any device means read on every device, and the browser's own copy is only a cache — clearing site data no longer throws it away."
 		};
 		//#endregion
 
@@ -613,10 +613,25 @@ window.__ModuleLoader__.load({
 		 * @param view - the screen report described above (may be absent).
 		 * @returns the ids being viewed, in list order; `[]` when there are none.
 		 */
+		/**
+		 * Which session this page is ON — the set that defines "entered" and "left".
+		 *
+		 * Only a change here counts as leaving a session, so this must NOT be emptied
+		 * by pausing: a background tab, or a global panel (settings, plugins, …) that
+		 * covers the conversation, keeps you on the same session. Emptying it would
+		 * drop the entered-at snapshot, and taking a fresh one on return is exactly
+		 * what acknowledges an ending you never left the session for — the bug behind
+		 * "切一下标签页红点就没了".
+		 *
+		 * `view.displayed` (read from the DOM) is the precise answer when available;
+		 * `list.current` and then retention are the fallbacks, which is also what keeps
+		 * the answer meaningful while a panel covers the conversation.
+		 * @param list - the session list snapshot (may be absent).
+		 * @param view - `{ displayed }`: the session the conversation is rendering.
+		 * @returns the ids being viewed, in list order; `[]` when there are none.
+		 */
 		function currentSessionIds(list, view) {
 			const screen = view !== null && typeof view === "object" ? view : {};
-			if (screen.visible === false) return [];
-			if (screen.panelActive === true) return [];
 			if (typeof screen.displayed === "string" && screen.displayed !== "") return [screen.displayed];
 			if (list === null || typeof list !== "object") return [];
 			if (typeof list.current === "string" && list.current !== "") return [list.current];
@@ -1762,6 +1777,9 @@ window.__ModuleLoader__.load({
 			// conversation (its own standard prop, the same one the shipped sidebar reads)
 			// and the tab going to the background. Both are read here, not inferred, so
 			// "you are looking at it" stops being a guess about stale retention.
+			// Pausing signals, NOT leaving signals: they stop the stay clock without
+			// touching which session this page is on (so the entered-at snapshot
+			// survives). Only switching to another session counts as leaving.
 			const panelActive = typeof props.usePanelInfo === "function"
 				? props.usePanelInfo((info) => info !== null && typeof info === "object" && info.activePanelId !== null)
 				: false;
@@ -1771,7 +1789,9 @@ window.__ModuleLoader__.load({
 				window.addEventListener("visibilitychange", onVisibility);
 				return () => window.removeEventListener("visibilitychange", onVisibility);
 			}, []);
-			const currentIds = currentSessionIds(list, { panelActive, visible, displayed: displayedSessionId() });
+			/** Looking at the conversation right now: on screen, and this tab in front. */
+			const watching = visible && panelActive !== true;
+			const currentIds = currentSessionIds(list, { displayed: displayedSessionId() });
 			const items = collectUnread(list, pending, config, seenState.seen);
 			const count = items.length;
 			// Being in a session is what marks it read — and the clock that does it is
@@ -1808,8 +1828,10 @@ window.__ModuleLoader__.load({
 			/**
 			 * Entered-at snapshot: `id → endAt` as it stood when that session joined
 			 * the view. Deliberately NOT refreshed while the session stays — that is
-			 * the rule ("an ending during your stay waits for the next entry"). A
-			 * session that leaves is forgotten, so coming back takes a fresh snapshot.
+			 * the rule ("an ending during your stay waits for the next entry"). Only a
+			 * session that LEAVES the view is forgotten, so coming back to it takes a
+			 * fresh snapshot; pausing (background tab, a global panel) keeps both the
+			 * session and its snapshot.
 			 */
 			const stayArmed = React.useRef(new Map());
 			React.useEffect(() => {
@@ -1821,7 +1843,10 @@ window.__ModuleLoader__.load({
 				for (const id of stayIds) {
 					if (!stayArmed.current.has(id)) stayArmed.current.set(id, lastTurnEndAt(snapshot[id]));
 				}
-				if (staySignature === "") return undefined;
+				// Paused: nothing may be acknowledged while nobody is watching, but the
+				// snapshots above stay put — that is what makes resuming continue the
+				// same entry instead of silently re-entering it.
+				if (staySignature === "" || watching !== true) return undefined;
 				const armed = stayIds.map((id) => ({ id, endAt: stayArmed.current.get(id) }));
 				let cancelled = false;
 				let timer = 0;
@@ -1842,7 +1867,7 @@ window.__ModuleLoader__.load({
 					cancelled = true;
 					if (timer !== 0) window.clearTimeout(timer);
 				};
-			}, [staySignature, delayMs]);
+			}, [staySignature, delayMs, watching]);
 			React.useEffect(() => { emitRealBadge(count, items); }, [count, items]);
 			// Map session → its Workspace from the official snapshot: the ID anchors the
 			// folder dot to the keyed row, the title is what the row displays (not always
