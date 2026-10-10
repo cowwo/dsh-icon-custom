@@ -105,7 +105,7 @@ check('空表 → 空', helpers.unreadAckTargets(null), [])
   const poked = []
   const items = [endedA, waiting, endedB]
   const ackTargets = helpers.unreadAckTargets(items)
-  const run = new Function('ackTargets', 'items', 'noteSeen', 'saveSeenState', 'emitUnreadPoke', 'emitUnreadPanel', markSrc + '\nreturn markAllRead')
+  const run = new Function('ackTargets', 'items', 'noteSeen', 'saveSeenState', 'emitUnreadPoke', 'emitPanel', markSrc + '\nreturn markAllRead')
   const markAllRead = run(ackTargets, items, (id, at) => { seen.push([id, at]); return true }, () => seen.push(['saved']), () => poked.push(1), (open) => closed.push(open))
   markAllRead()
   check('结束类被确认(记的是它自己的 endAt)', seen, [[endedA.id, 111], [endedB.id, 222], ['saved']])
@@ -116,15 +116,15 @@ check('空表 → 空', helpers.unreadAckTargets(null), [])
   const closed = []
   const items = [endedA]
   const ackTargets = helpers.unreadAckTargets(items)
-  const run = new Function('ackTargets', 'items', 'noteSeen', 'saveSeenState', 'emitUnreadPoke', 'emitUnreadPanel', markSrc + '\nreturn markAllRead')
+  const run = new Function('ackTargets', 'items', 'noteSeen', 'saveSeenState', 'emitUnreadPoke', 'emitPanel', markSrc + '\nreturn markAllRead')
   run(ackTargets, items, () => true, () => {}, () => {}, (open) => closed.push(open))()
-  check('全部都是结束类 → 关掉面板', closed, [false])
+  check('全部都是结束类 → 关掉面板', closed, [null])
 }
 {
   const seen = []
   const items = [waiting]
   const ackTargets = helpers.unreadAckTargets(items)
-  const run = new Function('ackTargets', 'items', 'noteSeen', 'saveSeenState', 'emitUnreadPoke', 'emitUnreadPanel', markSrc + '\nreturn markAllRead')
+  const run = new Function('ackTargets', 'items', 'noteSeen', 'saveSeenState', 'emitUnreadPoke', 'emitPanel', markSrc + '\nreturn markAllRead')
   run(ackTargets, items, () => { seen.push(1); return true }, () => {}, () => {}, () => {})()
   check('只有"在等你"时什么都不做(按钮也不会显示)', seen, [])
 }

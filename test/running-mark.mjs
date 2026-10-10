@@ -109,6 +109,8 @@ class El {
 		this.title = ''
 		this.isConnected = true
 		this.rect = null
+		/** type → handlers, so a test can click what the painter wired up. */
+		this.listeners = {}
 	}
 	get textContent() {
 		return this.ownText.map((t) => t.nodeValue).join('') + this.children.map((c) => c.textContent).join('')
@@ -170,7 +172,10 @@ class El {
 	contains(node) {
 		return this === node || this.descendants().includes(node)
 	}
-	addEventListener() {}
+	addEventListener(type, fn) {
+		if (this.listeners[type] === undefined) this.listeners[type] = []
+		this.listeners[type].push(fn)
+	}
 	removeEventListener() {}
 	querySelectorAll(selector) {
 		return this.descendants().filter((el) => matches(el, selector))
@@ -546,12 +551,12 @@ console.log('— 标题后的黄数字:红数字下方,零就隐藏 —')
 	root.appendChild(headerRow)
 	const doc = makeDocument(root)
 	const warned = []
-	const words = { unreadPanelCount: '{n} 个待处理', unreadPanelNone: '暂无待处理', runningMarkCount: '{n} 个进行中' }
+	const words = { unreadPanelCount: '{n} 个待处理', unreadPanelNone: '暂无待处理', runningMarkCount: '{n} 个进行中', runningPanelTrigger: '{n} 个进行中,点击查看' }
 	/** One painter over the real region, with a fixed unread count and a settable running count. */
-	function painter(runningCount) {
+	function painter(runningCount, opened = []) {
 		return new Function(
 			'document', 'window', 'console', 'RUNNING_YELLOW', 'workspaceDotContainer', 'effectiveCount', 'badgeLabel',
-			'normalizeCount', 'toggleUnreadPanel', 'runningTotal',
+			'normalizeCount', 'togglePanel', 'runningTotal',
 			'const words = ' + JSON.stringify(words) + ';\n' + region + '\nbadgeT = (key) => words[key] ?? key;\nreturn { paintHeaderBadge };'
 		)(
 			doc,
@@ -562,11 +567,12 @@ console.log('— 标题后的黄数字:红数字下方,零就隐藏 —')
 			() => 3,
 			(count) => (count > 99 ? '99+' : String(count)),
 			(value) => (Number.isFinite(Number(value)) && Number(value) > 0 ? Math.floor(Number(value)) : 0),
-			() => {},
+			(mode, anchor) => opened.push([mode, anchor]),
 			runningCount
 		)
 	}
-	painter(2).paintHeaderBadge()
+	const opened = []
+	painter(2, opened).paintHeaderBadge()
 	const red = dotsOf(headerRow, 'data-icon-custom-unreadbadge')
 	const yellow = dotsOf(headerRow, 'data-icon-custom-runbadge')
 	check(red.length === 1 && red[0].textContent === '3', '红数字画出来了(未读 3)')
@@ -574,12 +580,36 @@ console.log('— 标题后的黄数字:红数字下方,零就隐藏 —')
 	check(yellow.length === 1 && yellow[0].style.display === 'flex', '有进行中时黄数字可见')
 	check(yellow.length === 1 && red.length === 1 && yellow[0].style.left === red[0].style.left, '两个数字同一条右边线(右对齐)')
 	check(yellow.length === 1 && red.length === 1 && parseFloat(yellow[0].style.top) > parseFloat(red[0].style.top), '黄数字在红数字下方(红 top=' + red[0].style.top + ' / 黄 top=' + yellow[0].style.top + ')')
-	check(yellow.length === 1 && yellow[0].getAttribute('title') === '2 个进行中', '无障碍标签走字典(实际 ' + JSON.stringify(yellow[0] && yellow[0].getAttribute('title')) + ')')
+	check(yellow.length === 1 && yellow[0].getAttribute('title') === '2 个进行中,点击查看', '无障碍标签说的是"几个在跑 + 能点开"(实际 ' + JSON.stringify(yellow[0] && yellow[0].getAttribute('title')) + ')')
+	check(yellow.length === 1 && yellow[0].tagName === 'BUTTON', '黄数字是按钮,不是一块点不动的文字')
+	{
+		// 黄数字现在开着"进行中"那份清单,所以它的可点性(样式 + 热区 + 点击去向)
+		// 和黄点本身一样,属于这一节要锁的东西。
+		const cssStart = src.indexOf('const HEAD_BADGE_CSS = [')
+		const cssTail = '].join("")'
+		const cssEnd = src.indexOf(cssTail, cssStart)
+		const css = new Function('HEAD_BADGE_ATTR', 'HEAD_RUN_ATTR', 'RUNNING_YELLOW',
+			src.slice(cssStart, cssEnd + cssTail.length).replace('const HEAD_BADGE_CSS = ', 'return ') + ';'
+		)('data-icon-custom-unreadbadge', 'data-icon-custom-runbadge', '#f5c518')
+		const head = css.slice(css.indexOf('[data-icon-custom-runbadge]{'))
+		const rule = head.slice(0, head.indexOf('}'))
+		check(rule.includes('cursor:pointer') && !rule.includes('pointer-events:none'), '黄数字可点(cursor:pointer,且没有 pointer-events:none)')
+		check(css.includes('[data-icon-custom-runbadge]::after'), '黄数字的热区往外放大了(15px 的圆点直接点很难点中)')
+		check(css.includes('[data-icon-custom-runbadge]:hover'), '黄数字有 hover 反馈(看得出来它是能点的)')
+	}
+	// 点了它:开的必须是"进行中"那份清单,而不是"待处理"。
+	check(yellow.length === 1 && Array.isArray(yellow[0].listeners.click) && yellow[0].listeners.click.length === 1, '黄数字绑了点击监听(实际 ' + JSON.stringify(Object.keys(yellow[0].listeners)) + ')')
+	if (yellow.length === 1 && Array.isArray(yellow[0].listeners.click)) {
+		yellow[0].listeners.click[0]({ preventDefault() {}, stopPropagation() {} })
+		check(opened.length === 1 && opened[0][0] === 'running', '点黄数字 → 打开"进行中"清单(实际 ' + JSON.stringify(opened) + ')')
+		check(opened.length === 1 && opened[0][1] && typeof opened[0][1].bottom === 'number', '交给面板的是被点那个节点的位置(面板才知道该往哪儿弹)')
+	}
 	// 重画幂等:第二次不许把自家的黄节点当成"标题",也不许越画越多。
 	painter(2).paintHeaderBadge()
 	const again = dotsOf(headerRow, 'data-icon-custom-runbadge')
 	check(again.length === 1 && again[0] === yellow[0], '重画是幂等的(黄节点不会越画越多)')
-	check(red.length === 1 && headerRow.querySelectorAll('button').length === 2, '红节点也只有一个(自己的两个节点不会被认成搜索框)')
+	check(again[0].listeners.click.length === 1, '重画不会把点击监听又接一遍(否则点一次弹出两层)')
+	check(red.length === 1 && headerRow.querySelectorAll('button').length === 3, '按钮正好三个:搜索 + 红数字 + 黄数字(自家的两个不会被认成搜索框)')
 	check(warned.length === 0, '这一路上没有任何降级告警(' + warned.join(' | ') + ')')
 	// 没有进行中:隐藏,而不是画一个黄 0。
 	painter(0).paintHeaderBadge()

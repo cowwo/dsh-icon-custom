@@ -62,6 +62,11 @@ window.__ModuleLoader__.load({
 			unreadEnded: "刚结束,还没看",
 			unreadPanelOther: "其他",
 			unreadMarkAllRead: "全部标记已读",
+			/** 进行中清单(点黄字打开):和那个黄数字是同一个事实,不落盘、不推断。 */
+			runningPanelTitle: "进行中的会话",
+			runningPanelEmpty: "现在没有会话在运行",
+			runningPanelTrigger: "{n} 个进行中,点击查看",
+			runningPanelRow: "回合正在跑",
 			/** 与官方侧栏同一形状("13小时"),方便和列表里的时间戳逐字对上。 */
 			ageNow: "刚刚",
 			ageMinutes: "{n}分钟",
@@ -71,6 +76,8 @@ window.__ModuleLoader__.load({
 			ageYears: "{n}年",
 			workspaceDotLabel: "在工作区和会话行上显示红点(实验)",
 			workspaceDotHint: "在侧栏工作区那一行的文件夹图标上点一个小红点(收起的工作区里有多少未读,就看它),有未读的会话在其标题右边也跟一个小红点。会话行上的点只在那一行真的显示着时才画:折叠起来的会话由工作区那一行的点和「待处理」清单代表。这一项是贴着页面结构做的,DSH 升级后可能失效;失效时只会变成\"不显示\",不会影响红点数字、清单、跳转这些功能,随时可以关掉它。",
+			revealLabel: "点清单里的会话时,在侧栏定位到它(实验)",
+			revealHint: "点「待处理」或「进行中」清单里的一条时,除了打开那个会话,还会在侧栏把它所在的工作区展开、滚到那一行、并闪一下。这是贴着页面结构做的:官方只把\"展开 + 滚动\"留给了它自己的搜索框,没有给插件留接口,所以这里只能模拟点击官方的工作区行和「显示更多」。DSH 升级后可能失效,失效的表现只是\"侧栏不动\",打开会话完全不受影响。**展开状态是官方自己记住的**(存在浏览器里),所以它不会自己收回去——不想要就手动收起那个工作区,或者关掉这个开关。",
 			appBadgeLabel: "在系统应用图标上显示红点",
 			appBadgeHint: "安装为应用后,把同一个数字也放到系统图标上:Windows 是任务栏图标上的角标,macOS 是 Dock 角标,iOS 是主屏图标上的数字。样子由系统决定——Windows 上 Chrome 画深色圆+白字,Edge 走 Windows 系统徽章通道(是否显示数字由 Edge/Windows 决定);插件会周期重设数字,但只在应用窗口开着时更新。Safari 的程序坞网页应用 / 主屏应用还要先允许通知(见下面的「通知权限」),否则角标不会出现。",
 			appBadgeFootnote: "角标只在应用窗口开着时由本插件更新;数字超过 99 时由系统显示为 99+。",
@@ -148,6 +155,11 @@ window.__ModuleLoader__.load({
 			unreadEnded: "ended, not seen yet",
 			unreadPanelOther: "Other",
 			unreadMarkAllRead: "Mark all read",
+			/** The running list (opened by the yellow number): the very fact that number counts. */
+			runningPanelTitle: "Sessions running",
+			runningPanelEmpty: "Nothing is running right now",
+			runningPanelTrigger: "{n} running — click for the list",
+			runningPanelRow: "turn in flight",
 			/** Same shape as the shipped sidebar ("13h"), so the two can be read side by side. */
 			ageNow: "now",
 			ageMinutes: "{n}min",
@@ -157,6 +169,8 @@ window.__ModuleLoader__.load({
 			ageYears: "{n}y",
 			workspaceDotLabel: "Dots on workspace and session rows (experimental)",
 			workspaceDotHint: "Adds a small red dot to the folder icon of each workspace row (a collapsed workspace shows how many of its sessions are unread there), and one beside the title of every unread session row. A session dot is only drawn while that row is really rendered: folded sessions are represented by their workspace row's dot and the pending panel. This one reads the page structure, so a DSH upgrade may break it; when it does it simply stops showing, never affecting the counts, the list, or navigation. Turn it off any time.",
+			revealLabel: "Locate the session in the sidebar when a list row is clicked (experimental)",
+			revealHint: "Clicking a row in the \"needing you\" or \"running\" list opens that session AND, in the sidebar, expands its workspace, scrolls to the row and flashes it once. This reads the page structure: the official sidebar keeps expand-and-scroll for its own search box and exposes no interface for it, so this drives the shipped workspace row and \"show more\" button the way a click would. A DSH upgrade may break it, and the only symptom is a sidebar that does not move — opening the session is never affected. **The expanded state is remembered by the official sidebar itself** (in the browser), so it will not collapse again on its own: collapse that workspace by hand, or turn this off.",
 			appBadgeLabel: "Badge the system app icon",
 			appBadgeHint: "Once installed as an app, the same number also goes to the system icon: a taskbar badge on Windows, a Dock badge on macOS, a number on the iOS home-screen icon. The system decides how it looks — on Windows, Chrome draws a dark circle with white text, while Edge goes through the Windows badge channel (whether it shows the number is up to Edge/Windows). The plugin re-asserts the number periodically, but only while the app window is open. Safari's Dock and home-screen web apps additionally need notifications allowed first (see the permission row below), or the badge never appears.",
 			appBadgeFootnote: "The badge is only updated by this plugin while the app window is open; above 99 the system shows 99+.",
@@ -297,7 +311,9 @@ window.__ModuleLoader__.load({
 		const UNREAD_CLEAR_DELAY_MAX_SEC = 600;
 		/** Mirror of the host's default (see lib/unread.js) — badging the app icon is on. */
 		const UNREAD_APP_BADGE_FALLBACK = true;
-		let unreadConfig = { reasons: { ...UNREAD_FALLBACK_REASONS }, pending: true, workspaceDot: true, appBadge: UNREAD_APP_BADGE_FALLBACK, clearDelaySec: 0 };
+		/** Mirror of the host's default (see lib/unread.js) — locating a clicked row is on. */
+		const UNREAD_REVEAL_FALLBACK = true;
+		let unreadConfig = { reasons: { ...UNREAD_FALLBACK_REASONS }, pending: true, workspaceDot: true, appBadge: UNREAD_APP_BADGE_FALLBACK, clearDelaySec: 0, revealOnOpen: UNREAD_REVEAL_FALLBACK };
 		const unreadConfigListeners = new Set();
 		/** Mirror of the host's normalizer: any input becomes an integer 0..cap seconds. */
 		function normalizeClearDelay(input) {
@@ -319,7 +335,8 @@ window.__ModuleLoader__.load({
 				pending: typeof source.pending === "boolean" ? source.pending : true,
 				workspaceDot: typeof source.workspaceDot === "boolean" ? source.workspaceDot : true,
 				appBadge: typeof source.appBadge === "boolean" ? source.appBadge : UNREAD_APP_BADGE_FALLBACK,
-				clearDelaySec: normalizeClearDelay(source.clearDelaySec)
+				clearDelaySec: normalizeClearDelay(source.clearDelaySec),
+				revealOnOpen: typeof source.revealOnOpen === "boolean" ? source.revealOnOpen : UNREAD_REVEAL_FALLBACK
 			};
 		}
 		function emitUnreadConfig(input) {
@@ -714,6 +731,23 @@ window.__ModuleLoader__.load({
 			return value !== null && typeof value === "object" && typeof value.endAt === "number" ? value.endAt : 0;
 		}
 		/**
+		 * Which workspace a session is shown under: the basename of its cwd.
+		 *
+		 * The sidebar's own workspace rows are labelled with this basename, so a list
+		 * points at the same place the reader sees — the sidebar group cannot be
+		 * expanded for us (that state is private to the shipped browser), so naming
+		 * it is the honest substitute. Shared by the pending list and the running
+		 * list: two lists of the same sessions must not disagree about where they are.
+		 * @param entry - the session-list row (may be absent).
+		 * @returns the basename, or "" when the row carries no cwd.
+		 */
+		function sessionWhereOf(entry) {
+			const cwd = entry !== null && typeof entry === "object" && typeof entry.cwd === "string" ? entry.cwd : "";
+			if (cwd === "") return "";
+			const parts = cwd.replace(/[\\/]+$/, "").split(/[\\/]/);
+			return parts[parts.length - 1] || cwd;
+		}
+		/**
 		 * How many sessions deserve the badge right now: endings whose reason is
 		 * enabled and that this browser has not seen since, plus sessions waiting
 		 * for you (when that source is enabled). Only sub-agent sessions never count.
@@ -740,16 +774,6 @@ window.__ModuleLoader__.load({
 			const ids = new Set();
 			const byId = list !== null && typeof list === "object" && list.byId !== null && typeof list.byId === "object" ? list.byId : {};
 			const titleOf = (id, entry) => (entry !== null && typeof entry === "object" && typeof entry.displayTitle === "string" && entry.displayTitle !== "" ? entry.displayTitle : id);
-			// Which workspace the session lives in. The sidebar's own workspace rows are
-			// labelled with this cwd basename, so the list points at the same place the
-			// reader sees — the sidebar group cannot be expanded for us (that state is
-			// private to the shipped browser), so naming it is the honest substitute.
-			const whereOf = (entry) => {
-				const cwd = entry !== null && typeof entry === "object" && typeof entry.cwd === "string" ? entry.cwd : "";
-				if (cwd === "") return "";
-				const parts = cwd.replace(/[\\/]+$/, "").split(/[\\/]/);
-				return parts[parts.length - 1] || cwd;
-			};
 			if (list !== null && typeof list === "object") {
 				const order = Array.isArray(list.ids) ? list.ids : Object.keys(byId);
 				for (const id of order) {
@@ -766,7 +790,7 @@ window.__ModuleLoader__.load({
 					// turns them on, so a vocabulary growth can never surprise the badge.
 					if (reasons[value.reason] !== true) continue;
 					ids.add(id);
-					hits.push({ id, title: titleOf(id, entry), where: whereOf(entry), waiting: false, kind: value.reason, at: endAt });
+					hits.push({ id, title: titleOf(id, entry), where: sessionWhereOf(entry), waiting: false, kind: value.reason, at: endAt });
 				}
 			}
 			if (config === null || typeof config !== "object" || config.pending !== false) {
@@ -780,7 +804,7 @@ window.__ModuleLoader__.load({
 							return;
 						}
 						ids.add(id);
-						hits.push({ id, title: titleOf(id, byId[id]), where: whereOf(byId[id]), waiting: true, kind, at: Date.now() });
+						hits.push({ id, title: titleOf(id, byId[id]), where: sessionWhereOf(byId[id]), waiting: true, kind, at: Date.now() });
 					});
 				}
 			}
@@ -887,6 +911,8 @@ window.__ModuleLoader__.load({
 		 * being shown.
 		 */
 		let runningTotal = 0;
+		/** The sessions behind `runningTotal` (`{ id, title, where }`), for the running list. */
+		let runningItems = [];
 		let manualCount = 0;
 		let badgeSize = "md";
 		const badgeListeners = new Set();
@@ -894,11 +920,30 @@ window.__ModuleLoader__.load({
 			const n = Number(value);
 			return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 		}
+		/**
+		 * A stable identity for one running list.
+		 *
+		 * The number alone is not enough: with one session running, handing over to a
+		 * DIFFERENT session keeps the count at 1, so a guard that only compares counts
+		 * leaves the open list naming the session that already stopped — the mark and
+		 * the tab icon stay right while the list lies. Same reason the sidebar marks
+		 * key off `runningSignature`: compare the list by value.
+		 * @param items - `{ id, title, where }` rows (anything else is ignored).
+		 * @returns a string that changes whenever the list does.
+		 */
+		function runningItemsSignature(items) {
+			const out = [];
+			for (const item of Array.isArray(items) ? items : []) {
+				if (item === null || typeof item !== "object") continue;
+				out.push(`${item.id}\u0000${item.title}\u0000${item.where}`);
+			}
+			return out.join("\u0001");
+		}
 		function effectiveCount() {
 			return badgeSource === "manual" ? manualCount : realCount;
 		}
 		function badgeSnapshot() {
-			return { count: effectiveCount(), size: badgeSize, source: badgeSource, items: badgeSource === "manual" ? [] : realItems, running: runningTotal };
+			return { count: effectiveCount(), size: badgeSize, source: badgeSource, items: badgeSource === "manual" ? [] : realItems, running: runningTotal, runningItems };
 		}
 		function notifyBadge() {
 			const snapshot = badgeSnapshot();
@@ -921,7 +966,8 @@ window.__ModuleLoader__.load({
 			notifyBadge();
 		}
 		/**
-		 * The running sessions, as one number on the same bridge.
+		 * The running sessions, as one number on the same bridge — plus the list
+		 * behind it, so the yellow count can be opened like the red one.
 		 *
 		 * Emitted from every render of the headless badge source, so the "did it
 		 * actually change" guard is what keeps a re-render from repainting the tab
@@ -929,11 +975,14 @@ window.__ModuleLoader__.load({
 		 * `emitRealBadge`: the unread number and the running number are independent
 		 * facts, and a manual test number must not disturb the other.
 		 * @param value - how many sessions are running; anything non-positive is 0.
+		 * @param items - `{ id, title, where }`, one per running session, in list order.
 		 */
-		function emitRunningState(value) {
+		function emitRunningState(value, items) {
 			const next = normalizeCount(value);
-			if (next === runningTotal) return;
+			const nextItems = Array.isArray(items) ? items : [];
+			if (next === runningTotal && runningItemsSignature(nextItems) === runningItemsSignature(runningItems)) return;
 			runningTotal = next;
+			runningItems = nextItems;
 			notifyBadge();
 		}
 		function emitBadgeSize(value) {
@@ -1618,22 +1667,38 @@ window.__ModuleLoader__.load({
 		//#endregion
 
 		//#region unread panel
+		//#region header panel
 		/**
-		 * Whether the "which sessions?" list is open, and where its button sits.
-		 * The foot entry and the floating list live in two different slots, so they
+		 * Which list is open, and where the button that opened it sits.
+		 *
+		 * One store for both lists, and one open slot: the two numbers sit in the same
+		 * header row, so two panels open at once would stack on top of each other
+		 * under the same anchor. `mode` is therefore "unread" | "running" | null, and
+		 * opening either closes the other by construction.
+		 *
+		 * The buttons and the floating list live in two different slots, so they
 		 * cannot share React state — this tiny store is what they agree through.
 		 */
-		let unreadPanelOpen = false;
-		let unreadPanelAnchor = null;
-		const unreadPanelListeners = new Set();
-		function emitUnreadPanel(open, anchor) {
-			unreadPanelOpen = open === true;
-			if (anchor !== undefined) unreadPanelAnchor = anchor;
-			unreadPanelListeners.forEach((fn) => { try { fn(); } catch {} });
+		let panelMode = null;
+		let panelAnchor = null;
+		const panelListeners = new Set();
+		function emitPanel(mode, anchor) {
+			panelMode = mode === "unread" || mode === "running" ? mode : null;
+			if (anchor !== undefined) panelAnchor = anchor;
+			panelListeners.forEach((fn) => { try { fn(); } catch {} });
 		}
-		function subscribeUnreadPanel(fn) {
-			unreadPanelListeners.add(fn);
-			return () => { unreadPanelListeners.delete(fn); };
+		function subscribePanel(fn) {
+			panelListeners.add(fn);
+			return () => { panelListeners.delete(fn); };
+		}
+		/**
+		 * One marker's button: open its list, or close it when it is already the open
+		 * one. Clicking the OTHER marker switches lists instead of stacking them.
+		 * @param mode - "unread" (the red count) or "running" (the yellow count).
+		 * @param anchor - the clicked node's viewport rect, or undefined to keep the last one.
+		 */
+		function togglePanel(mode, anchor) {
+			emitPanel(panelMode === mode ? null : mode, anchor === undefined ? null : anchor);
 		}
 		/**
 		 * Tells the badge source that the marks moved somewhere it did not touch —
@@ -1647,9 +1712,6 @@ window.__ModuleLoader__.load({
 		function subscribeUnreadPoke(fn) {
 			unreadPokeListeners.add(fn);
 			return () => { unreadPokeListeners.delete(fn); };
-		}
-		function toggleUnreadPanel(anchor) {
-			emitUnreadPanel(!unreadPanelOpen, anchor === undefined ? null : anchor);
 		}
 		/**
 		 * Roll the pending sessions up to one dot per workspace.
@@ -1779,6 +1841,22 @@ window.__ModuleLoader__.load({
 			return parts.join(" · ");
 		}
 		/**
+		 * The dim second line of one running row: that it is running, and which
+		 * session it is. Deliberately no age — the official session list carries no
+		 * "started at" fact (only `running: boolean`), and this plugin would rather
+		 * print less than invent a time. Shape matches `unreadRowSubtitle` so the two
+		 * lists read as one panel with two modes.
+		 * @param item - a row from the badge bridge's `runningItems`.
+		 * @param t - locale binder.
+		 * @returns the line, already joined.
+		 */
+		function runningRowSubtitle(item, t) {
+			const parts = [t("runningPanelRow")];
+			const short = shortSessionId(item.id);
+			if (short !== "") parts.push(short);
+			return parts.join(" · ");
+		}
+		/**
 		 * What "mark all read" may actually acknowledge: the turn-end rows.
 		 *
 		 * A "waiting for you" row is not watermark-based at all — it is listed while
@@ -1797,6 +1875,175 @@ window.__ModuleLoader__.load({
 				targets.push({ id: item.id, seenAt: item.at });
 			}
 			return targets;
+		}
+		//#region reveal in sidebar
+		/**
+		 * Locating a clicked session in the sidebar: expand its workspace, scroll to the
+		 * row, light it up for a moment.
+		 *
+		 * The official sidebar does exactly this by itself — but ONLY for its own search
+		 * results. The state behind that (`revealSessionId`) is private to that component
+		 * and no Service exposes it, while `uiWorkspace.openSession` switches the main
+		 * view and nothing else. So this drives the shipped rows the way a user's click
+		 * would: the workspace row toggles its group, the "show more" button raises the
+		 * collapsed-session limit.
+		 *
+		 * It therefore reads the page structure, and it is DECORATIVE: by the time it runs
+		 * the session is already open. Moved markup (a DSH upgrade), a rail sidebar or an
+		 * open search box all degrade to "the sidebar did not move" — never to an error,
+		 * and never to a blocked click.
+		 */
+		const REVEAL_ROW_KEY_ATTR = "data-row-key";
+		const REVEAL_FLASH_ATTR = "data-icon-custom-flash";
+		const REVEAL_FLASH_STYLE_ID = "dsh-icon-custom-flash-css";
+		/** How long the located row stays lit. */
+		const REVEAL_FLASH_MS = 1200;
+		/**
+		 * How many DOM steps one reveal may take.
+		 *
+		 * The official flow does this in one shot by writing its own state; we only have
+		 * clicks, and every click needs a commit before the row can exist. The realistic
+		 * worst case is a collapsed workspace whose session sits past "show more", which
+		 * releases five rows per click — so this covers a workspace of roughly twenty
+		 * sessions and then stops, rather than driving a shipped control in a loop.
+		 */
+		const REVEAL_MAX_STEPS = 6;
+		/**
+		 * The flash rules: a short outline pulse, not a lasting class. The point is to say
+		 * "here it is", not to leave a mark on a shipped row.
+		 */
+		const REVEAL_FLASH_CSS = [
+			`[${REVEAL_FLASH_ATTR}]{animation:dsh-icon-custom-flash ${REVEAL_FLASH_MS}ms ease-out}`,
+			`@keyframes dsh-icon-custom-flash{0%{outline:2px solid var(--dsw-alias-state-business-primary,#4d6bfe);outline-offset:-2px}100%{outline:2px solid transparent;outline-offset:-2px}}`,
+			`@media (prefers-reduced-motion:reduce){[${REVEAL_FLASH_ATTR}]{animation:none;outline:2px solid var(--dsw-alias-state-business-primary,#4d6bfe);outline-offset:-2px}}`
+		].join("");
+		/** The row currently lit, and the timer that will un-light it. */
+		let revealFlashRow = null;
+		let revealFlashTimer = 0;
+
+		/**
+		 * What to do next to make one session's row visible.
+		 *
+		 * Pure, so the order — and the giving up — is testable without a browser: a row
+		 * that is already there gets scrolled to; otherwise its workspace is expanded;
+		 * otherwise "show more" is clicked; otherwise nothing is touched at all.
+		 * @param state - `{ hasRow, hasWorkspace, expanded, hasOverflow, overflowExpanded, steps }`.
+		 * @returns `"scroll" | "expand" | "overflow" | "give-up"`.
+		 */
+		function revealAction(state) {
+			if (state.hasRow === true) return "scroll";
+			if (state.steps >= REVEAL_MAX_STEPS) return "give-up";
+			if (state.hasWorkspace === true && state.expanded !== true) return "expand";
+			// `overflowExpanded` must be false: that button toggles, and this feature has
+			// no business COLLAPSING a workspace the reader deliberately opened up.
+			if (state.hasOverflow === true && state.overflowExpanded !== true) return "overflow";
+			return "give-up";
+		}
+
+		/**
+		 * The shipped row carrying one `data-row-key`, matched by VALUE.
+		 *
+		 * Not by a selector built from the key: session ids go into the key verbatim, so a
+		 * selector would need escaping rules that a plain comparison simply does not have.
+		 * @param container - the browsing region root.
+		 * @param key - e.g. `session:<id>` / `workspace:<id>` / `overflow:<id>`.
+		 * @returns the element, or null.
+		 */
+		function findRowByKey(container, key) {
+			try {
+				for (const node of container.querySelectorAll(`[${REVEAL_ROW_KEY_ATTR}]`)) {
+					if (node.getAttribute(REVEAL_ROW_KEY_ATTR) === key) return node;
+				}
+			} catch { /* a broken subtree must not become a thrown click */ }
+			return null;
+		}
+
+		/** One paint's worth of waiting, so a click can commit before the row is looked for. */
+		function nextPaint() {
+			return new Promise((resolve) => {
+				try {
+					if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(() => resolve());
+					else window.setTimeout(resolve, 16);
+				} catch { resolve(); }
+			});
+		}
+
+		/** Install the flash rules once per page. */
+		function ensureRevealFlashStyle() {
+			try {
+				if (document.getElementById(REVEAL_FLASH_STYLE_ID) !== null) return;
+				const style = document.createElement("style");
+				style.id = REVEAL_FLASH_STYLE_ID;
+				style.textContent = REVEAL_FLASH_CSS;
+				document.head.appendChild(style);
+			} catch { /* styling is cosmetic; never let it reach a click */ }
+		}
+
+		/** Take the flash off, whoever put it there. Also the unload path. */
+		function clearRevealFlash() {
+			if (revealFlashTimer !== 0) {
+				try { window.clearTimeout(revealFlashTimer); } catch { /* the page is going away */ }
+				revealFlashTimer = 0;
+			}
+			if (revealFlashRow !== null) {
+				try { revealFlashRow.removeAttribute(REVEAL_FLASH_ATTR); } catch { /* already detached */ }
+				revealFlashRow = null;
+			}
+		}
+
+		/**
+		 * Scroll one shipped row into view and light it for a moment.
+		 *
+		 * `block:"nearest"` is the official call and the reason a reveal does not yank the
+		 * whole list: it moves the list only as far as the row needs.
+		 * @param row - the session row element.
+		 */
+		function flashRow(row) {
+			try {
+				clearRevealFlash();
+				ensureRevealFlashStyle();
+				row.setAttribute(REVEAL_FLASH_ATTR, "1");
+				revealFlashRow = row;
+				revealFlashTimer = window.setTimeout(() => { clearRevealFlash(); }, REVEAL_FLASH_MS);
+			} catch { /* cosmetic */ }
+			try { row.scrollIntoView({ block: "nearest" }); } catch { /* older engines take no options */ }
+		}
+
+		/**
+		 * Put one session's row in front of the reader.
+		 *
+		 * Best effort from the first line to the last: the session is ALREADY open when
+		 * this runs, so every exit here — no container, no workspace id, a sidebar that
+		 * never renders the row — costs the reader nothing but the scroll.
+		 * @param sessionId - the session to locate.
+		 * @param workspaceId - its workspace, when the official snapshot knows one.
+		 */
+		async function revealSessionRow(sessionId, workspaceId) {
+			if (typeof sessionId !== "string" || sessionId === "") return;
+			if (unreadConfig === null || typeof unreadConfig !== "object" || unreadConfig.revealOnOpen === false) return;
+			const container = workspaceDotContainer();
+			if (container === null) return;
+			const wsKey = typeof workspaceId === "string" && workspaceId !== "" ? `workspace:${workspaceId}` : null;
+			const moreKey = typeof workspaceId === "string" && workspaceId !== "" ? `overflow:${workspaceId}` : null;
+			for (let steps = 0; steps < REVEAL_MAX_STEPS; steps++) {
+				const row = findRowByKey(container, `session:${sessionId}`);
+				const wsRow = wsKey === null ? null : findRowByKey(container, wsKey);
+				const more = moreKey === null ? null : findRowByKey(container, moreKey);
+				const action = revealAction({
+					hasRow: row !== null,
+					hasWorkspace: wsRow !== null,
+					expanded: wsRow !== null && wsRow.getAttribute("aria-expanded") === "true",
+					hasOverflow: more !== null,
+					overflowExpanded: more !== null && more.getAttribute("aria-expanded") === "true",
+					steps
+				});
+				if (action === "scroll") { flashRow(row); return; }
+				if (action === "give-up") return;
+				const target = action === "expand" ? wsRow : more;
+				if (target === null) return;
+				try { target.click(); } catch { return; }
+				await nextPaint();
+			}
 		}
 		//#endregion
 
@@ -2330,6 +2577,36 @@ window.__ModuleLoader__.load({
 			const watching = visible && panelActive !== true;
 			const currentIds = currentSessionIds(list, { displayed: displayedSessionId() });
 			const items = collectUnread(list, pending, config, seenState.seen);
+			/**
+			 * Map session → its Workspace from the official snapshot: the ID anchors the
+			 * folder dot to the keyed row, the title is what the row displays (not always
+			 * the cwd basename, and not always equal to the stored title either).
+			 *
+			 * The same map answers a second question: which workspace row to expand when a
+			 * list row is clicked. The pending list only carries the cwd basename, which
+			 * cannot be turned back into a workspace id.
+			 */
+			const owners = React.useMemo(() => {
+				const out = {};
+				const workspaceItems = workspaces !== null && typeof workspaces === "object" && Array.isArray(workspaces.items) ? workspaces.items : [];
+				for (const workspace of workspaceItems) {
+					if (workspace === null || typeof workspace !== "object") continue;
+					if (!Array.isArray(workspace.sessionIds)) continue;
+					const id = typeof workspace.workspaceId === "string" ? workspace.workspaceId : "";
+					const title = typeof workspace.title === "string" ? workspace.title : "";
+					for (const sessionId of workspace.sessionIds) out[sessionId] = { id, title };
+				}
+				return out;
+			}, [workspaces]);
+			/**
+			 * The pending rows plus the workspace they belong to. A session the official
+			 * snapshot places nowhere keeps its row untouched: `revealSessionRow` then has
+			 * nothing to expand, which is the honest answer, not a guess.
+			 */
+			const itemsWithOwner = React.useMemo(() => items.map((item) => {
+				const owner = owners[item.id];
+				return owner === undefined || owner.id === "" ? item : { ...item, workspaceId: owner.id };
+			}), [items, owners]);
 			const count = items.length;
 			// Being in a session is what marks it read — and the clock that does it is
 			// armed by ENTERING the session, never by a new ending.
@@ -2405,15 +2682,7 @@ window.__ModuleLoader__.load({
 					if (timer !== 0) window.clearTimeout(timer);
 				};
 			}, [staySignature, delayMs, watching]);
-			React.useEffect(() => { emitRealBadge(count, items); }, [count, items]);
-			// The running fact, straight off the same two official props and with no
-			// host round trip at all. `runningSignature` is what the marks effect below
-			// depends on, so a list re-render with the same set of running sessions
-			// does not repaint the sidebar.
-			const runningIds = running.enabled === false ? [] : runningSessionIds(list, status);
-			const runningSignature = runningIds.join("|");
-			const runningCount = runningIds.length;
-			React.useEffect(() => { emitRunningState(runningCount); }, [runningCount]);
+			React.useEffect(() => { emitRealBadge(count, itemsWithOwner); }, [count, itemsWithOwner]);
 			/**
 			 * One session's displayed title, the way the sidebar shows it.
 			 *
@@ -2423,32 +2692,35 @@ window.__ModuleLoader__.load({
 			 * title has not landed yet would get no yellow dot at all.
 			 */
 			const titleOf = (id, entry) => (entry !== null && typeof entry === "object" && typeof entry.displayTitle === "string" && entry.displayTitle !== "" ? entry.displayTitle : id);
-			// Map session → its Workspace from the official snapshot: the ID anchors the
-			// folder dot to the keyed row, the title is what the row displays (not always
-			// the cwd basename, and not always equal to the stored title either).
+			// The running fact, straight off the same two official props and with no
+			// host round trip at all. `runningSignature` is what the marks effect below
+			// depends on, so a list re-render with the same set of running sessions
+			// does not repaint the sidebar.
+			const runningIds = running.enabled === false ? [] : runningSessionIds(list, status);
+			const byId = list !== null && typeof list === "object" && list.byId !== null && typeof list.byId === "object" ? list.byId : {};
+			// The rows behind the yellow count, for the list it opens (`titleOf` +
+			// the same workspace naming the pending list uses, so the two modes of the
+			// panel cannot disagree about what a session is called or where it lives).
+			const runningRows = runningIds.map((id) => ({ id, title: titleOf(id, byId[id]), where: sessionWhereOf(byId[id]), workspaceId: owners[id] === undefined ? "" : owners[id].id }));
+			// Two keys for two consumers: the sidebar repaints on the SET OF IDS, while
+			// the panel must also refresh when a title or a workspace changes.
+			const runningSignature = runningIds.join("|");
+			const runningRowSignature = runningItemsSignature(runningRows);
+			const runningCount = runningIds.length;
+			React.useEffect(() => { emitRunningState(runningCount, runningRows); }, [runningRowSignature]);
+			// The session rows, for naming the running ones the way the sidebar shows
+			// them (`displayTitle`, the same fallback the red dots use).
 			React.useEffect(() => {
-				const owners = {};
-				const workspaceItems = workspaces !== null && typeof workspaces === "object" && Array.isArray(workspaces.items) ? workspaces.items : [];
-				for (const workspace of workspaceItems) {
-					if (workspace === null || typeof workspace !== "object") continue;
-					if (!Array.isArray(workspace.sessionIds)) continue;
-					const id = typeof workspace.workspaceId === "string" ? workspace.workspaceId : "";
-					const title = typeof workspace.title === "string" ? workspace.title : "";
-					for (const sessionId of workspace.sessionIds) owners[sessionId] = { id, title };
-				}
-				// The session rows, for naming the running ones the way the sidebar shows
-				// them (`displayTitle`, the same fallback the red dots use).
-				const byId = list !== null && typeof list === "object" && list.byId !== null && typeof list.byId === "object" ? list.byId : {};
 				emitSidebarMarks({
 					workspaces: dotsFromItems(items, owners),
 					sessions: items.map((item) => ({ id: item.id, title: item.title })),
 					// The same rows, the other fact. Both arrays travel together, so the
 					// paint pass can put the yellow dot in front of the red one
 					// deterministically instead of depending on which feature changed last.
-					runningSessions: runningIds.map((id) => ({ id, title: titleOf(id, byId[id]) })),
+					runningSessions: runningRows.map((row) => ({ id: row.id, title: row.title })),
 					runningWorkspaces: runningWorkspaceDots(runningIds, owners)
 				});
-			}, [items, workspaces, runningSignature, running]);
+			}, [items, owners, runningSignature, running]);
 			return null;
 		}
 
@@ -2472,13 +2744,16 @@ window.__ModuleLoader__.load({
 		 *
 		 * The count is shown for EVERY value including zero: a grey 0 keeps the
 		 * position from jumping, and doubles as the only way back to the panel once
-		 * the old sidebar-foot button is gone.
+		 * the old sidebar-foot button is gone. The YELLOW count, by contrast, has no
+		 * zero state and is a button: with nothing running there is no list to open.
 		 */
 		const HEAD_BADGE_ATTR = "data-icon-custom-unreadbadge";
 		/** The running count's own node in the same header row — bottom-right of the label. */
 		const HEAD_RUN_ATTR = "data-icon-custom-runbadge";
 		const HEAD_BADGE_STYLE_ID = "dsh-icon-custom-unreadbadge-css";
 		const HEAD_BADGE_WIRED = "data-icon-custom-unreadbadge-wired";
+		/** The yellow pill's own wiring flag — it is a button now, exactly like the red one. */
+		const HEAD_RUN_WIRED = "data-icon-custom-runbadge-wired";
 		const HEAD_BADGE_MAX_FAILURES = 40;
 		/** How many ancestors to walk up looking for the header row. */
 		const HEAD_BADGE_MAX_STEPS = 6;
@@ -2514,9 +2789,13 @@ window.__ModuleLoader__.load({
 			`[${HEAD_BADGE_ATTR}]::after{content:"";position:absolute;inset:0 -5px -5px -5px;border-radius:999px}`,
 			`[${HEAD_BADGE_ATTR}]:hover{filter:brightness(1.12)}`,
 			`[${HEAD_BADGE_ATTR}][data-zero="1"]{background:var(--dsw-alias-state-idle-primary,#b6bcc4)}`,
-			// The running count: same pill, other corner, not interactive. It has no
-			// zero state — a yellow 0 would be pure noise — so it is shown or hidden.
-			`[${HEAD_RUN_ATTR}]{position:absolute;display:none;align-items:center;justify-content:center;min-width:15px;height:15px;padding:0 3.5px;box-sizing:border-box;border:0;border-radius:999px;background:${RUNNING_YELLOW};color:#1f1f1f;font:inherit;font-size:9.5px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em;pointer-events:none;z-index:3;box-shadow:0 0 0 1.5px var(--dsw-specific-sidebar-fill,#fff)}`
+			// The running count: same pill, other corner, and now a button like the red
+			// one — it opens the list of the very sessions it counts. It has no zero
+			// state (a yellow 0 would be pure noise), so with nothing running there is
+			// nothing to open either: the pill is simply not there.
+			`[${HEAD_RUN_ATTR}]{position:absolute;display:none;align-items:center;justify-content:center;min-width:15px;height:15px;padding:0 3.5px;box-sizing:border-box;border:0;border-radius:999px;background:${RUNNING_YELLOW};color:#1f1f1f;font:inherit;font-size:9.5px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em;cursor:pointer;z-index:3;box-shadow:0 0 0 1.5px var(--dsw-specific-sidebar-fill,#fff)}`,
+			`[${HEAD_RUN_ATTR}]::after{content:"";position:absolute;inset:0 -5px -5px -5px;border-radius:999px}`,
+			`[${HEAD_RUN_ATTR}]:hover{filter:brightness(1.12)}`
 		].join("");
 
 		/** Install the badge rules once per page. */
@@ -2625,7 +2904,7 @@ window.__ModuleLoader__.load({
 					event.stopPropagation();
 					const rect = node.getBoundingClientRect();
 					// `bottom` is what the panel drops below; see unreadPanelPlacement.
-					toggleUnreadPanel({ left: rect.left, top: rect.top, bottom: rect.bottom });
+					togglePanel("unread", { left: rect.left, top: rect.top, bottom: rect.bottom });
 				});
 			}
 			const count = effectiveCount();
@@ -2641,17 +2920,35 @@ window.__ModuleLoader__.load({
 			}
 			if (node.textContent !== text) node.textContent = text;
 			// The running count, in the same row's other corner: top-right is the unread
-			// number (where it has always been), bottom-right is this one.
+			// number (where it has always been), bottom-right is this one. A button, not
+			// a label — it opens the list of the sessions it is counting.
 			let runNode = row.querySelector(`[${HEAD_RUN_ATTR}]`);
 			if (runNode === null) {
-				runNode = document.createElement("span");
+				runNode = document.createElement("button");
+				runNode.type = "button";
 				runNode.setAttribute(HEAD_RUN_ATTR, "1");
+				// Same as the red one: appended AFTER the shipped controls, so it can
+				// never be mistaken for the header's first button.
 				row.appendChild(runNode);
+			}
+			if (runNode.getAttribute(HEAD_RUN_WIRED) !== "1") {
+				runNode.setAttribute(HEAD_RUN_WIRED, "1");
+				runNode.addEventListener("click", (event) => {
+					// The row belongs to the sidebar; keep the click to ourselves.
+					event.preventDefault();
+					event.stopPropagation();
+					const rect = runNode.getBoundingClientRect();
+					// The same anchor shape the red badge hands over; see
+					// `unreadPanelPlacement` for what `bottom` is used for.
+					togglePanel("running", { left: rect.left, top: rect.top, bottom: rect.bottom });
+				});
 			}
 			const running = normalizeCount(runningTotal);
 			const runText = badgeLabel(running);
 			if (typeof badgeT === "function") {
-				const spoken = badgeT("runningMarkCount").replace("{n}", String(running));
+				// Says what the number is AND that it opens: it is a control now, and a
+				// bare "2 running" would leave a screen reader with no idea it is one.
+				const spoken = badgeT("runningPanelTrigger").replace("{n}", String(running));
 				if (runNode.getAttribute("aria-label") !== spoken) {
 					runNode.setAttribute("aria-label", spoken);
 					runNode.setAttribute("title", spoken);
@@ -2757,30 +3054,33 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * The list behind that number, in the frame-wide overlay layer so it escapes
-		 * the sidebar's clipping and scroll container. Clicking a row opens that
-		 * session — which is also what marks it read.
+		 * The list behind those numbers, in the frame-wide overlay layer so it escapes
+		 * the sidebar's clipping and scroll container. ONE panel with two modes: the
+		 * red count opens "who needs you", the yellow count opens "who is running".
+		 * Clicking a row opens that session — which is also what marks an unread one
+		 * read. The running mode has no "mark all read": running is a live fact, not a
+		 * queue, so there is nothing there to acknowledge.
 		 */
-		function UnreadPopup(props) {
+		function HeaderPopup(props) {
 			const [snapshot, setSnapshot] = React.useState(badgeSnapshot);
-			const [open, setOpen] = React.useState(unreadPanelOpen);
+			const [mode, setMode] = React.useState(panelMode);
 			// Ages are computed against the HOST's clock (the endings are host
 			// timestamps); re-tick while open so "刚刚" does not stay stale.
 			const [, tick] = React.useState(0);
 			React.useEffect(() => subscribeBadge(setSnapshot), []);
-			React.useEffect(() => subscribeUnreadPanel(() => setOpen(unreadPanelOpen)), []);
+			React.useEffect(() => subscribePanel(() => setMode(panelMode)), []);
 			React.useEffect(() => {
-				if (!open) return undefined;
+				if (mode === null) return undefined;
 				const interval = window.setInterval(() => tick((n) => n + 1), 30000);
 				return () => window.clearInterval(interval);
-			}, [open]);
+			}, [mode]);
 			React.useEffect(() => {
-				if (!open) return undefined;
-				const onKey = (event) => { if (event.key === "Escape") emitUnreadPanel(false); };
+				if (mode === null) return undefined;
+				const onKey = (event) => { if (event.key === "Escape") emitPanel(null); };
 				const onDown = (event) => {
 					const node = event.target;
-					if (node !== null && typeof node.closest === "function" && node.closest('[data-icon-custom-unread="1"]') !== null) return;
-					emitUnreadPanel(false);
+					if (node !== null && typeof node.closest === "function" && node.closest('[data-icon-custom-panel="1"]') !== null) return;
+					emitPanel(null);
 				};
 				window.addEventListener("keydown", onKey);
 				document.addEventListener("mousedown", onDown, true);
@@ -2788,10 +3088,12 @@ window.__ModuleLoader__.load({
 					window.removeEventListener("keydown", onKey);
 					document.removeEventListener("mousedown", onDown, true);
 				};
-			}, [open]);
-			if (!open) return null;
+			}, [mode]);
+			if (mode === null) return null;
 			const t = props.t;
-			const anchor = unreadPanelAnchor;
+			/** Which of the two lists this render is: same shell, different rows. */
+			const running = mode === "running";
+			const anchor = panelAnchor;
 			// Measured, not assumed: the panel has to clear whatever width the sidebar
 			// currently has (it is resizable and collapsible).
 			let sidebarRight = null;
@@ -2806,8 +3108,12 @@ window.__ModuleLoader__.load({
 				border: "1px solid var(--dsw-alias-border-l2)", background: "var(--dsw-alias-bg-layer-1)",
 				boxShadow: "0 10px 30px rgba(0,0,0,.18)", color: "var(--dsw-alias-label-primary)", fontSize: "12px"
 			};
-			const items = Array.isArray(snapshot.items) ? snapshot.items : [];
-			const ackTargets = unreadAckTargets(items);
+			// The rows of whichever list is open. Both carry `{ id, title, where }`;
+			// only the unread ones carry an ending to acknowledge.
+			const items = running
+				? (Array.isArray(snapshot.runningItems) ? snapshot.runningItems : [])
+				: (Array.isArray(snapshot.items) ? snapshot.items : []);
+			const ackTargets = running ? [] : unreadAckTargets(items);
 			/**
 			 * Acknowledge every turn-end row at once.
 			 *
@@ -2821,12 +3127,12 @@ window.__ModuleLoader__.load({
 				if (!changed) return;
 				saveSeenState();
 				emitUnreadPoke();
-				if (ackTargets.length === items.length) emitUnreadPanel(false);
+				if (ackTargets.length === items.length) emitPanel(null);
 			};
-			return React.createElement("div", { "data-icon-custom-unread": "1", style },
-				React.createElement("div", { style: { fontWeight: 600, padding: "2px 6px 8px" } }, t("unreadPanelTitle")),
+			return React.createElement("div", { "data-icon-custom-panel": "1", style },
+				React.createElement("div", { style: { fontWeight: 600, padding: "2px 6px 8px" } }, t(running ? "runningPanelTitle" : "unreadPanelTitle")),
 				items.length === 0
-					? React.createElement("div", { style: { padding: "2px 6px 8px", opacity: 0.7 } }, t("unreadPanelEmpty"))
+					? React.createElement("div", { style: { padding: "2px 6px 8px", opacity: 0.7 } }, t(running ? "runningPanelEmpty" : "unreadPanelEmpty"))
 					: React.createElement("div", { style: { display: "flex", flexDirection: "column", maxHeight: place.listMaxHeight + "px", overflowY: "auto" } },
 						groupUnreadByWorkspace(items).map((group) => React.createElement("div", { key: group.where === "" ? "\u0000none" : group.where },
 							React.createElement("div", { style: { padding: "7px 8px 3px", fontSize: "11px", fontWeight: 600, opacity: 0.55, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
@@ -2834,11 +3140,11 @@ window.__ModuleLoader__.load({
 							),
 							group.items.map((item) => React.createElement("button", {
 								key: item.id, type: "button",
-								onClick: () => { emitUnreadPanel(false); props.onOpen(item.id); },
+								onClick: () => { emitPanel(null); props.onOpen(item); },
 								style: { display: "block", width: "100%", textAlign: "left", padding: "6px 8px", border: "0", borderRadius: "8px", background: "transparent", color: "inherit", font: "inherit", cursor: "pointer" }
 							},
 								React.createElement("span", { style: { display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, item.title),
-								React.createElement("span", { style: { display: "block", opacity: 0.6, fontSize: "11px" } }, unreadRowSubtitle(item, hostNow(), t))
+								React.createElement("span", { style: { display: "block", opacity: 0.6, fontSize: "11px" } }, running ? runningRowSubtitle(item, t) : unreadRowSubtitle(item, hostNow(), t))
 							))
 						))
 					),
@@ -3091,8 +3397,11 @@ window.__ModuleLoader__.load({
 			const saveUnreadRule = React.useCallback((patch) => {
 				const next = normalizeUnreadConfig({ ...unreadConfig, ...patch });
 				emitUnreadConfig(next);
+				// Every field is sent explicitly, and the host replaces its copy with what
+				// arrives — so a field missing HERE is a field that silently reverts to its
+				// default on the next page load, however well the local toggle worked.
 				rpc.call("/api", "iconCustom/setUnreadRule", {
-					args: { request: { reasons: next.reasons, pending: next.pending, workspaceDot: next.workspaceDot, appBadge: next.appBadge, clearDelaySec: next.clearDelaySec } }
+					args: { request: { reasons: next.reasons, pending: next.pending, workspaceDot: next.workspaceDot, appBadge: next.appBadge, clearDelaySec: next.clearDelaySec, revealOnOpen: next.revealOnOpen } }
 				}).catch(() => {});
 			}, [rpc]);
 			// Toggle one unread reason. Applies locally at once; the host keeps the
@@ -3106,6 +3415,11 @@ window.__ModuleLoader__.load({
 			// The fuse for the one fragile piece (see the workspace-dots region).
 			const onWorkspaceDotToggle = React.useCallback((checked) => {
 				saveUnreadRule({ workspaceDot: checked });
+			}, [saveUnreadRule]);
+			// The second fragile piece's own fuse (see the reveal region): locating a
+			// clicked session drives the shipped sidebar rows.
+			const onRevealToggle = React.useCallback((checked) => {
+				saveUnreadRule({ revealOnOpen: checked });
 			}, [saveUnreadRule]);
 			// The system-icon projection of the same number. Saved through the same
 			// one save path, so this field can never be dropped by a caller.
@@ -3398,6 +3712,17 @@ window.__ModuleLoader__.load({
 						React.createElement("label", { style: { display: "inline-flex", alignItems: "center", gap: "6px", fontSize: 12, color: "var(--dsw-alias-label-primary)", cursor: "pointer" } },
 							React.createElement("input", {
 								type: "checkbox",
+								checked: unread.revealOnOpen !== false,
+								onChange: (event) => onRevealToggle(event.target.checked === true)
+							}),
+							React.createElement("span", null, t("revealLabel"))
+						),
+						React.createElement("div", { style: style.hint }, t("revealHint"))
+					),
+					React.createElement("div", { style: { marginTop: "10px" } },
+						React.createElement("label", { style: { display: "inline-flex", alignItems: "center", gap: "6px", fontSize: 12, color: "var(--dsw-alias-label-primary)", cursor: "pointer" } },
+							React.createElement("input", {
+								type: "checkbox",
 								checked: unread.appBadge !== false,
 								onChange: (event) => onAppBadgeToggle(event.target.checked === true)
 							}),
@@ -3557,7 +3882,7 @@ window.__ModuleLoader__.load({
 			// The badge itself is NOT a slot occupant: it is injected into the
 			// sidebar's section header by `paintHeaderBadge()` (see above), because
 			// `sidebar.workspaces` is a single slot covering the whole region. Only
-			// the list it opens still rides a slot — the frame-wide overlay, which
+			// the lists they open still ride a slot — the frame-wide overlay, which
 			// escapes the sidebar's clipping.
 			//
 			// 0.2.x has no `ctx.sessions.open(id)` (the ClientSessions service exposes
@@ -3566,15 +3891,23 @@ window.__ModuleLoader__.load({
 			// `ctx.uiWorkspace.openSession(id)` (ui-chat does exactly this), so the entry
 			// is looked up optionally: navigation is best effort and must never make the
 			// favicon half depend on the workspace UI being mounted.
-			const openSession = (id) => {
+			const openSession = (row) => {
+				// A list row (`{ id, workspaceId, … }`) since 0.19.0: the workspace is what
+				// the sidebar reveal needs, and the pending list cannot supply it later. A
+				// bare id still opens the session — it just cannot expand anything.
+				const id = row !== null && typeof row === "object" ? row.id : row;
+				const workspaceId = row !== null && typeof row === "object" && typeof row.workspaceId === "string" ? row.workspaceId : "";
 				try { ctx.get("uiWorkspace")?.openSession(id); } catch { /* navigation is best effort */ }
+				// Deliberately not awaited, and never allowed to matter: the session is open
+				// either way (see the reveal region for why this is all best effort).
+				void revealSessionRow(id, workspaceId);
 			};
 			// The injected node labels itself for screen readers, so it needs the
 			// locale binder that only exists inside `apply()`.
 			badgeT = t;
 			ctx.slots.inject("shell.overlay", () => ctx.slots.register(
-				{ name: "shell.overlay", id: "icon-custom-unread-popup", order: 30 },
-				() => React.createElement(UnreadPopup, { t, onOpen: openSession })
+				{ name: "shell.overlay", id: "icon-custom-header-popup", order: 30 },
+				() => React.createElement(HeaderPopup, { t, onOpen: openSession })
 			));
 
 			// Real number source: a headless occupant of the frame-wide overlay
@@ -3676,6 +4009,9 @@ window.__ModuleLoader__.load({
 					offRunning();
 					clearWorkspaceDots();
 					clearHeaderBadge();
+					// The one highlight this plugin ever puts on a SHIPPED row: it must not
+					// outlive the plugin, even if the unload lands inside its flash window.
+					clearRevealFlash();
 				};
 			}, "dsh-icon-custom: workspace dots");
 			// The platform favicon.svg repaints itself for dark mode through

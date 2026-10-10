@@ -249,9 +249,11 @@ console.log('— 客户端归一化:老宿主(响应里没有 appBadge)也必须
 {
   const reasonsAt = src.indexOf('const UNREAD_FALLBACK_REASONS =')
   const badgeAt = src.indexOf('const UNREAD_APP_BADGE_FALLBACK =')
+  const revealAt = src.indexOf('const UNREAD_REVEAL_FALLBACK =')
   const normalizeSrc = [
     src.slice(reasonsAt, src.indexOf(';', reasonsAt) + 1),
     src.slice(badgeAt, src.indexOf(';', badgeAt) + 1),
+    src.slice(revealAt, src.indexOf(';', revealAt) + 1),
     extract('function normalizeClearDelay(input) {'),
     extract('function normalizeUnreadConfig(input) {')
   ].join('\n')
@@ -262,6 +264,9 @@ console.log('— 客户端归一化:老宿主(响应里没有 appBadge)也必须
   check('用户关掉 → 保持关', normalize({ appBadge: false }).appBadge, false)
   check('脏值 "yes" → 回默认(而不是当成 true 之外的怪值)', normalize({ appBadge: 'yes' }).appBadge, true)
   check('其余字段不受影响', [normalize({ appBadge: false }).pending, normalize({ appBadge: false }).workspaceDot], [true, true])
+  // 同一个归一化器里的第二个"实验项":定位也跟着老宿主走默认。
+  check('老宿主没有 revealOnOpen → 默认开', normalize({ reasons: {}, pending: true, workspaceDot: true, clearDelaySec: 0 }).revealOnOpen, true)
+  check('定位关掉 → 保持关', normalize({ revealOnOpen: false }).revealOnOpen, false)
 }
 
 console.log('— 字典:两种语言都有角标文案 —')
