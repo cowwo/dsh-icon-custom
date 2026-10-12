@@ -647,68 +647,101 @@ window.__ModuleLoader__.load({
 			try { return document.visibilityState !== "hidden"; } catch { return true; }
 		}
 		/**
+		 * The official "Session on screen" answer, when this build exposes it.
+		 *
+		 * `ctx.uiSession.adapter.current` is the very binding the renderer derives
+		 * `[data-conversation-session]` from, so it answers with the same value without
+		 * the DOM's first-match ambiguity (see `conversationOnScreen`) — and it keeps
+		 * answering while a global panel has unmounted the conversation, where the DOM
+		 * has nothing to say. Filled in by `apply`, where a client context exists;
+		 * until then it answers nothing, which is exactly what the other fallbacks are
+		 * for.
+		 * @returns the session id, or undefined when this build does not say.
+		 */
+		let officialSessionId = () => undefined;
+		/**
+		 * What the conversation on screen is rendering, in two parts.
+		 *
+		 * `rendered` says whether the main conversation is on screen at all, and `id` is
+		 * the session it renders (`undefined` while none is selected — the landing view).
+		 * The distinction matters: "the conversation is showing no session" is an answer
+		 * ("you are not in a session"), while "there is no conversation element" is not
+		 * an answer at all (a global panel replaced it, the page is still booting).
+		 *
+		 * TWO occurrences can carry this attribute: the main conversation, and the
+		 * embedded one the right sidebar keeps MOUNTED while collapsed (hidden by CSS and
+		 * `inert`). A plain `querySelector` returns the first in document order, so the
+		 * moment the main occurrence carries no attribute — no session selected, the
+		 * archive/close path — the hidden one becomes the answer: "you are looking at
+		 * that subagent conversation". The stay clock reads that as "you left this
+		 * session", drops the entered-at snapshot, and the ending that arrived meanwhile
+		 * is acknowledged the moment you come back: a dot that goes out without you ever
+		 * leaving. Only an occurrence the user can actually see is an answer.
+		 * @returns `{ rendered, id }`.
+		 */
+		function conversationOnScreen() {
+			try {
+				const nodes = document.querySelectorAll("[data-conversation-session]");
+				let rendered = false;
+				for (const node of nodes) {
+					if (typeof node.closest === "function" && (node.closest("[data-sidebar-right-panel]") !== null || node.closest("[inert]") !== null)) continue;
+					rendered = true;
+					const id = node.getAttribute("data-conversation-session");
+					if (typeof id === "string" && id !== "") return { rendered: true, id };
+				}
+				return { rendered, id: undefined };
+			} catch { return { rendered: false, id: undefined }; }
+		}
+		/**
 		 * The session whose conversation the page is rendering right now, from the DOM.
 		 *
 		 * This is the only signal that names the session on screen, and it is the one
 		 * that keeps a stale retention from clearing a dot: `retainedBy.mainView` means
-		 * "recently opened, not yet released", not "displayed". `undefined` means this
-		 * build carries no such marker (or the probe failed) and callers must fall back
-		 * to the retention answer rather than treat it as "nothing is displayed".
+		 * "recently opened, not yet released", not "displayed". `undefined` means the page
+		 * does not name one (see `conversationOnScreen`) and callers must fall back to the
+		 * other answers rather than treat it as "nothing is displayed".
 		 * @returns the session id, or undefined when the page cannot say.
 		 */
 		function displayedSessionId() {
-			try {
-				const node = document.querySelector("[data-conversation-session]");
-				if (node === null) return undefined;
-				const id = node.getAttribute("data-conversation-session");
-				return typeof id === "string" && id !== "" ? id : undefined;
-			} catch { return undefined; }
+			return conversationOnScreen().id;
 		}
 		/**
-		 * Every session the main view is showing.
+		 * The session this page is ON — the set that defines "entered" and "left" — plus
+		 * whether the answer is actually known.
 		 *
-		 * `view` carries what the page itself says about the screen:
-		 *   * `panelActive` — a global panel (settings, plugins, …) replaced the
-		 *     conversation. DSH's own sidebar treats that as "no current session"
-		 *     (`usePanelInfo((info) => info.activePanelId !== null)`), and following it
-		 *     is what fixes the "cleared a dot I never opened" report: the conversation
-		 *     is simply not on screen.
-		 *   * `visible` — whether this page is on screen at all.
-		 *   * `displayed` — the session the conversation is rendering, when the DOM can
-		 *     name it. That is the precise answer and it wins over retention.
+		 * Only a change here counts as leaving a session, so this must NOT be emptied by
+		 * pausing: a background tab, or a global panel (settings, plugins, …) that covers
+		 * the conversation, keeps you on the same session. Emptying it would drop the
+		 * entered-at snapshot, and taking a fresh one on return is exactly what
+		 * acknowledges an ending you never left the session for.
 		 *
-		 * Retention (`retainedBy.mainView`) stays as the fallback: it is what shipped
-		 * before, it keeps working on a build without the newer signals, and its known
-		 * weakness (a release that lags behind the pane) only costs a false "read" when
-		 * nothing better is available.
+		 * The answers, in order:
+		 *   * the visible conversation's own session (the precise one, and the only one
+		 *     that may overrule retention);
+		 *   * the official "Session on screen" binding (`view.official`, from
+		 *     `ctx.uiSession`) — the very value the attribute above is rendered from, so
+		 *     it still answers while a global panel has unmounted the conversation;
+		 *   * `list.current`, when a build carries it;
+		 *   * retention (`retainedBy.mainView > 0`), the pre-0.12 answer.
+		 *
+		 * `known: false` is the important one: it means the page could not name ANY
+		 * session, which is NOT the same as "no session is being viewed". Callers must
+		 * keep the snapshots they already have instead of reading it as a leave — a
+		 * single such frame used to be enough to acknowledge an ending you were sitting
+		 * in front of.
 		 * @param list - the session list snapshot (may be absent).
-		 * @param view - the screen report described above (may be absent).
-		 * @returns the ids being viewed, in list order; `[]` when there are none.
+		 * @param view - `{ displayed, official }`: what the page says about the screen.
+		 * @returns `{ ids, known }`; `ids` in list order, `[]` when there are none.
 		 */
-		/**
-		 * Which session this page is ON — the set that defines "entered" and "left".
-		 *
-		 * Only a change here counts as leaving a session, so this must NOT be emptied
-		 * by pausing: a background tab, or a global panel (settings, plugins, …) that
-		 * covers the conversation, keeps you on the same session. Emptying it would
-		 * drop the entered-at snapshot, and taking a fresh one on return is exactly
-		 * what acknowledges an ending you never left the session for — the bug behind
-		 * "切一下标签页红点就没了".
-		 *
-		 * `view.displayed` (read from the DOM) is the precise answer when available;
-		 * `list.current` and then retention are the fallbacks, which is also what keeps
-		 * the answer meaningful while a panel covers the conversation.
-		 * @param list - the session list snapshot (may be absent).
-		 * @param view - `{ displayed }`: the session the conversation is rendering.
-		 * @returns the ids being viewed, in list order; `[]` when there are none.
-		 */
-		function currentSessionIds(list, view) {
+		function viewedSessions(list, view) {
 			const screen = view !== null && typeof view === "object" ? view : {};
-			if (typeof screen.displayed === "string" && screen.displayed !== "") return [screen.displayed];
-			if (list === null || typeof list !== "object") return [];
-			if (typeof list.current === "string" && list.current !== "") return [list.current];
+			if (typeof screen.displayed === "string" && screen.displayed !== "") return { ids: [screen.displayed], known: true };
+			if (typeof screen.official === "string" && screen.official !== "") return { ids: [screen.official], known: true };
+			if (screen.idle === true) return { ids: [], known: true }; // the conversation is up, showing no session
+			if (list === null || typeof list !== "object") return { ids: [], known: false };
+			if (typeof list.current === "string" && list.current !== "") return { ids: [list.current], known: true };
 			const byId = list.byId;
-			if (byId === null || typeof byId !== "object") return [];
+			if (byId === null || typeof byId !== "object") return { ids: [], known: false };
 			const ids = [];
 			for (const session of Object.values(byId)) {
 				if (session === null || typeof session !== "object") continue;
@@ -716,7 +749,11 @@ window.__ModuleLoader__.load({
 				const count = retainedBy !== null && typeof retainedBy === "object" ? retainedBy.mainView : undefined;
 				if (typeof count === "number" && count > 0 && typeof session.id === "string" && session.id !== "") ids.push(session.id);
 			}
-			return ids;
+			// Retention with nothing in it, and the conversation not on screen either, is
+			// exactly the frame this must not read as a leave: it is what a global panel
+			// over a released session, a boot, or a DOM gap looks like. The landing view
+			// (`idle`) is the positive "you are on no session" answer, not this.
+			return { ids, known: ids.length > 0 };
 		}
 		/**
 		 * One session's last `turn/end` timestamp (host domain), or 0 when it has
@@ -762,13 +799,16 @@ window.__ModuleLoader__.load({
 		 * @param list - the session list snapshot (may be absent).
 		 * @param pending - the pending-interaction map (may be absent).
 		 * @param config - the unread rule to apply.
+		 * @param lit - the ids currently showing a dot, so a change of ENDING KIND cannot
+		 *   put an already lit dot out (see below). Optional.
 		 * @returns the badge number.
 		 */
-		function collectUnread(list, pending, config, seen) {
+		function collectUnread(list, pending, config, seen, lit) {
 			const reasons = config !== null && typeof config === "object" && config.reasons !== null && typeof config.reasons === "object" ? config.reasons : {};
 			// The watermark is a parameter, not module state: this stays a pure
 			// decision function that a test can drive with any marks it likes.
 			const marks = seen !== null && typeof seen === "object" ? seen : {};
+			const litIds = lit !== null && lit !== undefined && typeof lit.has === "function" ? lit : null;
 			/** { id, title, waiting, kind, at } — newest first, "in wait" ahead of "ended". */
 			const hits = [];
 			const ids = new Set();
@@ -788,7 +828,12 @@ window.__ModuleLoader__.load({
 					if (endAt <= 0 || typeof seenAt !== "number" || endAt <= seenAt) continue;
 					// Unknown reasons (a newer DSH adds one) stay hidden until the user
 					// turns them on, so a vocabulary growth can never surprise the badge.
-					if (reasons[value.reason] !== true) continue;
+					// A reason the user turned OFF behaves the same way — with ONE
+					// exception: it must never put out a dot that is already lit. That dot
+					// stands for an ending nobody has read yet, and "the newest turn ended
+					// in a way I do not want to be told about" is not "I read it". Only the
+					// watermark clears a lit dot.
+					if (reasons[value.reason] !== true && !(litIds !== null && litIds.has(id))) continue;
 					ids.add(id);
 					hits.push({ id, title: titleOf(id, entry), where: sessionWhereOf(entry), waiting: false, kind: value.reason, at: endAt });
 				}
@@ -904,6 +949,16 @@ window.__ModuleLoader__.load({
 		/** The sessions behind `realCount`, for the sidebar list (newest first). */
 		let realItems = [];
 		/**
+		 * Which sessions are showing an unread dot right now.
+		 *
+		 * Read back by `collectUnread` so a change of ending KIND cannot put a lit dot
+		 * out (see the reason filter there). Kept here rather than derived on the fly
+		 * because the projection only carries the LATEST ending: once a newer one lands
+		 * with a reason the user turned off, the one that lit the dot is no longer
+		 * visible anywhere.
+		 */
+		let litUnreadIds = new Set();
+		/**
 		 * How many sessions are running right now — the official `running` fact,
 		 * already folded by `runningSessionIds`. It rides the SAME bridge as the
 		 * unread number because it has the same two consumers (the brand mark and
@@ -963,6 +1018,14 @@ window.__ModuleLoader__.load({
 		function emitRealBadge(value, items) {
 			realCount = normalizeCount(value);
 			realItems = Array.isArray(items) ? items : [];
+			// Remember what is lit BEFORE the next round of folding can hide it: the
+			// projection only carries the latest ending, so an ending whose reason is
+			// turned off would otherwise erase the memory of the one that lit the dot.
+			const lit = new Set();
+			for (const item of realItems) {
+				if (item !== null && typeof item === "object" && typeof item.id === "string" && item.id !== "") lit.add(item.id);
+			}
+			litUnreadIds = lit;
 			notifyBadge();
 		}
 		/**
@@ -1381,11 +1444,34 @@ window.__ModuleLoader__.load({
 		// canvas and the merged bitmap is handed back to the browser. Count 0 (and
 		// teardown) restores the pristine platform/custom href.
 		const FAVICON_SIZE = 64;
+		/**
+		 * How long one base-image fetch may take before the compose gives up on it.
+		 *
+		 * A fetch that neither loads nor errors (a stalled request, a proxy that never
+		 * answers) used to leave the compose pending forever — and silently, because no
+		 * error is ever raised — so the tab icon simply stopped following the numbers
+		 * with nothing in the console. This timeout turns that into a reported failure
+		 * the watchdog can retry.
+		 */
+		const FAVICON_LOAD_TIMEOUT_MS = 8000;
 		let faviconBase = null;
 		let composeSeq = 0;
 		let faviconComposing = false;
 		/** Last compose failure, so a repeated failure warns once instead of spamming. */
 		let lastComposeError = null;
+		/**
+		 * The picture the tab is carrying right now: `未读|进行中|基图`.
+		 *
+		 * A `data:` href alone says nothing — an OLD bitmap and a bitmap whose compose
+		 * FAILED look exactly the same from the DOM. Remembering which picture was
+		 * actually written is what lets the watchdog tell "already right" from "stale
+		 * but still ours", which is the hole that used to freeze the tab icon.
+		 */
+		let faviconDrawnSignature = "";
+		/** The picture a compose is fetching right now, so a repeat cannot start a second fetch. */
+		let faviconPendingSignature = "";
+		/** Whether the last compose failed: the watchdog must retry instead of trusting the DOM. */
+		let faviconFailed = false;
 		/** Which icon the plugin considers current (filled from the status RPC). */
 		let iconState = { active: false, rev: null, png: false, mime: null };
 		/** The icon URL this page SHOULD be showing, per the plugin's own status. */
@@ -1398,6 +1484,24 @@ window.__ModuleLoader__.load({
 		function desiredIconType() {
 			if (iconState.active !== true) return "image/svg+xml";
 			return iconState.png === true ? "image/png" : (iconState.mime || "image/svg+xml");
+		}
+		/**
+		 * One string that names one picture: which numbers, on which base.
+		 *
+		 * It is the identity used both to remember what was drawn and to decide whether
+		 * a compose still has anything to do. The numbers are part of it on purpose —
+		 * "1 unread" and "2 unread" are different pictures even though both are `data:`.
+		 * @param count - the unread number this picture carries.
+		 * @param runningCount - the running number this picture carries.
+		 * @param base - the base icon href the numbers ride on.
+		 * @returns the signature string.
+		 */
+		function faviconSignature(count, runningCount, base) {
+			return normalizeCount(count) + "|" + normalizeCount(runningCount) + "|" + base;
+		}
+		/** The picture this page SHOULD be carrying right now, from live state. */
+		function wantedFaviconSignature() {
+			return faviconSignature(effectiveCount(), runningTotal, desiredIconHref());
 		}
 		/**
 		 * Every `<link rel="icon">` the document carries, creating one if the page
@@ -1545,36 +1649,64 @@ window.__ModuleLoader__.load({
 			c2d.fillText(text, cx, cy + size * 0.01);
 			c2d.restore();
 		}
+		/**
+		 * Load one image for the composite, with a deadline.
+		 *
+		 * Settles exactly once, whatever happens: a late `onload` after the timeout must
+		 * not draw on top of the picture that replaced it.
+		 * @param href - absolute URL of the base icon.
+		 * @returns the loaded image, or a rejection whose message says why.
+		 */
 		function loadIconImage(href) {
 			return new Promise((resolve, reject) => {
 				const img = new Image();
-				img.onload = () => resolve(img);
-				img.onerror = () => reject(new Error("icon-load"));
+				let done = false;
+				const settle = (fn, value) => {
+					if (done) return;
+					done = true;
+					window.clearTimeout(timer);
+					fn(value);
+				};
+				const timer = window.setTimeout(() => { settle(reject, new Error("icon-load-timeout")); }, FAVICON_LOAD_TIMEOUT_MS);
+				img.onload = () => { settle(resolve, img); };
+				img.onerror = () => { settle(reject, new Error("icon-load")); };
 				img.src = href;
 			});
 		}
 		async function applyBadgeToFavicon(count, size) {
-			const base = desiredIconHref();
-			// Two independent marks ride one composite, so "nothing to draw" means
-			// neither of them is wanted — not merely "no unread".
-			const running = runningTotal > 0;
-			if (count <= 0 && !running) {
-				// No badge to draw. With a custom icon active the page must carry it on
-				// EVERY link (a stale scheme-specific sibling outranks the one we set);
-				// with none, the shipped dark/light pair goes back untouched — the
-				// plugin promises zero side effects while it has no icon of its own.
-				if (iconState.active === true) setIconEverywhere(base, desiredIconType());
-				else restoreShippedIcons();
-				faviconBase = null;
-				return;
-			}
-			// The base is resolved from the plugin's status, never from whatever the
-			// page happens to carry, and never from our own previous bitmap.
-			faviconBase = { href: base, type: desiredIconType() };
+			// ONE snapshot decides this whole compose: which marks to draw AND with which
+			// numbers. `runningTotal` used to be read again after the await, so a run that
+			// stopped mid-fetch was painted as a yellow "0", and the two numbers could
+			// come from two different moments.
+			const wantedCount = normalizeCount(count);
+			const runningCount = normalizeCount(runningTotal);
+			const signature = faviconSignature(wantedCount, runningCount, desiredIconHref());
+			// The sequence is taken BEFORE the "nothing to draw" branch: restoring the
+			// plain icon has to invalidate any compose still in flight, or that older
+			// bitmap lands afterwards and paints the number we just cleared back onto
+			// the tab. (That is exactly the "stale dot that will not go away" report.)
 			const seq = ++composeSeq;
 			faviconComposing = true;
+			faviconPendingSignature = signature;
+			faviconFailed = false;
 			try {
-				const img = await loadIconImage(new URL(faviconBase.href, document.baseURI).href);
+				if (wantedCount <= 0 && runningCount <= 0) {
+					// No badge to draw. With a custom icon active the page must carry it on
+					// EVERY link (a stale scheme-specific sibling outranks the one we set);
+					// with none, the shipped dark/light pair goes back untouched — the
+					// plugin promises zero side effects while it has no icon of its own.
+					if (seq !== composeSeq) return;
+					if (iconState.active === true) setIconEverywhere(desiredIconHref(), desiredIconType());
+					else restoreShippedIcons();
+					faviconBase = null;
+					faviconDrawnSignature = signature;
+					return;
+				}
+				// The base is resolved from the plugin's status, never from whatever the
+				// page happens to carry, and never from our own previous bitmap.
+				const base = desiredIconHref();
+				faviconBase = { href: base, type: desiredIconType() };
+				const img = await loadIconImage(new URL(base, document.baseURI).href);
 				if (seq !== composeSeq) return;
 				const canvas = document.createElement("canvas");
 				canvas.width = FAVICON_SIZE;
@@ -1590,16 +1722,22 @@ window.__ModuleLoader__.load({
 				// together to the largest pair that fits, so neither reads as a bug and
 				// the two can never overlap.
 				const badgeUnit = badgeScale(size);
-				const badgeK = count > 0 && running ? badgeUnit * faviconBadgeFitScale(badgeUnit) : badgeUnit;
-				if (count > 0) drawFaviconBadge(c2d, FAVICON_SIZE, count, badgeK);
-				if (running) drawFaviconRunningBadge(c2d, FAVICON_SIZE, runningTotal, badgeK);				setIconEverywhere(canvas.toDataURL("image/png"), "image/png");
+				const badgeK = wantedCount > 0 && runningCount > 0 ? badgeUnit * faviconBadgeFitScale(badgeUnit) : badgeUnit;
+				if (wantedCount > 0) drawFaviconBadge(c2d, FAVICON_SIZE, wantedCount, badgeK);
+				if (runningCount > 0) drawFaviconRunningBadge(c2d, FAVICON_SIZE, runningCount, badgeK);
+				setIconEverywhere(canvas.toDataURL("image/png"), "image/png");
+				faviconDrawnSignature = signature;
 			} catch (error) {
 				// Never silent: a failure here is invisible in the UI (the tab simply
 				// keeps its previous icon), which once cost a whole debugging session.
 				// Warn once per distinct reason so the 5s watchdog cannot spam.
+				faviconFailed = true;
 				warnFaviconCompose(error);
 			} finally {
-				if (seq === composeSeq) faviconComposing = false;
+				if (seq === composeSeq) {
+					faviconComposing = false;
+					faviconPendingSignature = "";
+				}
 			}
 		}
 		/**
@@ -1623,10 +1761,22 @@ window.__ModuleLoader__.load({
 		 * rejection, and the tab icon would simply never change with nothing in the
 		 * console — the exact "no warning, no badge" state. Every call site goes through
 		 * here instead.
+		 *
+		 * It is also the ONE place that decides whether there is anything to do: this is
+		 * called on every badge notification, and a badge notification happens on every
+		 * render. Without the signature guard each of those started its own base-image
+		 * fetch, and on a page whose base image is slow (a reverse proxy, a cold cache,
+		 * a laptop waking up) every fetch was superseded before it landed — the tab icon
+		 * fell further behind the numbers with every repaint instead of catching up.
 		 * @param count - sessions needing you; 0 restores the plain icon.
 		 * @param size - badge size key.
+		 * @param force - recompose even when this exact picture was already drawn (the
+		 *   page was disturbed, the base icon changed, the last compose failed).
 		 */
-		function composeFavicon(count, size) {
+		function composeFavicon(count, size, force) {
+			const signature = faviconSignature(count, runningTotal, desiredIconHref());
+			if (signature === faviconPendingSignature) return; // this very picture is being fetched
+			if (force !== true && signature === faviconDrawnSignature && faviconFailed !== true) return; // already on the tab
 			try {
 				Promise.resolve(applyBadgeToFavicon(count, size)).catch(warnFaviconCompose);
 			} catch (error) {
@@ -1641,6 +1791,12 @@ window.__ModuleLoader__.load({
 		 * icon link — a cached page, a browser extension, a tab move, or a plugin
 		 * reload. Our own output is a `data:` URL, so any other href means the
 		 * composite was replaced and has to be rebuilt from the new base.
+		 *
+		 * "Still ours" is not the same as "still right": a `data:` href can carry an
+		 * older number, or one whose compose died halfway. Comparing the picture that
+		 * was actually written against the one that is wanted now is what lets this
+		 * watchdog repair those — and what makes a failed compose a retry instead of a
+		 * tab icon that is frozen for the rest of the page's life.
 		 */
 		function reconcileFavicon() {
 			// Inspect EVERY icon link: 0.2.x ships two (dark/light), and a sibling
@@ -1648,21 +1804,24 @@ window.__ModuleLoader__.load({
 			// stale sibling is exactly what used to outrank the icon we set.
 			const hrefs = iconLinks().map((candidate) => candidate.getAttribute("href"));
 			const ours = hrefs.length > 0 && hrefs.every((value) => typeof value === "string" && value.slice(0, 5) === "data:");
-			if (effectiveCount() <= 0 && runningTotal <= 0) {
+			const wanted = wantedFaviconSignature();
+			if (ours && faviconDrawnSignature === wanted && faviconFailed !== true) return; // exactly right, right now
+			const count = effectiveCount();
+			if (count <= 0 && normalizeCount(runningTotal) <= 0) {
 				// Carries the custom icon, or puts the shipped pair back. Both writers
 				// only touch a link that actually differs, so this stays a no-op once
 				// the page is correct and cannot re-arm the head observer.
-				composeFavicon(0);
+				composeFavicon(0, badgeSize, ours !== true);
 				return;
 			}
-			if (ours || faviconComposing) return; // already showing, or a build is running
-			composeFavicon(effectiveCount(), badgeSize);
+			if (faviconComposing) return; // a build is already running
+			composeFavicon(count, badgeSize, ours !== true);
 		}
 		// A freshly applied base icon replaces whatever the browser holds, so the
 		// composite must be rebuilt from the NEW base instead of the stale one.
 		function refreshFaviconBase() {
 			faviconBase = null;
-			composeFavicon(effectiveCount(), badgeSize);
+			composeFavicon(effectiveCount(), badgeSize, true);
 		}
 		//#endregion
 
@@ -2575,8 +2734,19 @@ window.__ModuleLoader__.load({
 			}, []);
 			/** Looking at the conversation right now: on screen, and this tab in front. */
 			const watching = visible && panelActive !== true;
-			const currentIds = currentSessionIds(list, { displayed: displayedSessionId() });
-			const items = collectUnread(list, pending, config, seenState.seen);
+			// Read the screen once per render: which session the visible conversation
+			// renders (`displayed`), whether it is up but showing none (`idle` — the
+			// landing view, a real "you are not in a session"), and whether it is not up
+			// at all (neither ⇒ `known: false`, and the entered-at snapshots stay).
+			const onScreen = conversationOnScreen();
+			const viewed = viewedSessions(list, {
+				displayed: onScreen.id,
+				official: officialSessionId(),
+				idle: onScreen.rendered === true && onScreen.id === undefined
+			});
+			const currentIds = viewed.ids;
+			const stayKnown = viewed.known;
+			const items = collectUnread(list, pending, config, seenState.seen, litUnreadIds);
 			/**
 			 * Map session → its Workspace from the official snapshot: the ID anchors the
 			 * folder dot to the keyed row, the title is what the row displays (not always
@@ -2650,9 +2820,17 @@ window.__ModuleLoader__.load({
 			const stayArmed = React.useRef(new Map());
 			React.useEffect(() => {
 				const snapshot = stayLive.current.list !== null && typeof stayLive.current.list === "object" && stayLive.current.list.byId !== null && typeof stayLive.current.list.byId === "object" ? stayLive.current.list.byId : {};
-				const live = new Set(stayIds);
-				for (const id of Array.from(stayArmed.current.keys())) {
-					if (!live.has(id)) stayArmed.current.delete(id);
+				// ONLY A KNOWN ANSWER MAY DROP A SNAPSHOT. A frame in which the page could
+				// not name any session (a panel unmounting the conversation while the
+				// official binding is unavailable, a DOM gap, a build without either
+				// signal) is not a leave: forgetting the snapshot there is what made the
+				// clock re-enter the session behind the reader's back and acknowledge an
+				// ending that arrived while they were sitting in front of it.
+				if (stayKnown !== false) {
+					const live = new Set(stayIds);
+					for (const id of Array.from(stayArmed.current.keys())) {
+						if (!live.has(id)) stayArmed.current.delete(id);
+					}
 				}
 				for (const id of stayIds) {
 					if (!stayArmed.current.has(id)) stayArmed.current.set(id, lastTurnEndAt(snapshot[id]));
@@ -2681,7 +2859,7 @@ window.__ModuleLoader__.load({
 					cancelled = true;
 					if (timer !== 0) window.clearTimeout(timer);
 				};
-			}, [staySignature, delayMs, watching]);
+			}, [staySignature, delayMs, watching, stayKnown]);
 			React.useEffect(() => { emitRealBadge(count, itemsWithOwner); }, [count, itemsWithOwner]);
 			/**
 			 * One session's displayed title, the way the sidebar shows it.
@@ -3783,6 +3961,18 @@ window.__ModuleLoader__.load({
 			// Setting it here (not at module scope) is what keeps the store usable in a
 			// test harness with no connection: pushes stay no-ops, the badge still works.
 			seenRpc = rpc;
+			// The official "Session on screen" binding, looked up lazily so a build
+			// without it (or a plugin loaded before ui-session) simply answers nothing
+			// and the DOM/retention fallbacks keep the behaviour this file shipped with.
+			officialSessionId = () => {
+				try {
+					const service = ctx.get("uiSession");
+					const current = service !== null && service !== undefined ? service.adapter?.current : undefined;
+					const value = current !== null && current !== undefined && typeof current.getSnapshot === "function" ? current.getSnapshot() : undefined;
+					const key = value !== null && typeof value === "object" ? value.key : undefined;
+					return typeof key === "string" && key !== "" ? key : undefined;
+				} catch { return undefined; }
+			};
 			// Pull the host state once, so the brand mark and the badge are correct
 			// before the settings section is ever opened. The unread rule rides its
 			// own endpoint: the icon RPCs keep their pre-badge response shape.
@@ -3928,10 +4118,12 @@ window.__ModuleLoader__.load({
 				// value that is already on the bridge. The brand mark reads it at
 				// mount; the tab icon has to be told, or a plugin hot-reload would
 				// leave it restored (the old effect's cleanup) until the next change.
-				composeFavicon(effectiveCount(), badgeSize);
+				composeFavicon(effectiveCount(), badgeSize, true);
 				return () => {
 					unsubscribe();
-					composeFavicon(0);
+					// Forced: the promise is that unloading this half leaves the page's
+					// own icon behind, whatever this page load had drawn before.
+					composeFavicon(0, badgeSize, true);
 				};
 			}, "dsh-icon-custom: favicon badge");
 			// Watchdog. The tab icon is the one surface other parties can disturb
@@ -4015,8 +4207,9 @@ window.__ModuleLoader__.load({
 				};
 			}, "dsh-icon-custom: workspace dots");
 			// The platform favicon.svg repaints itself for dark mode through
-			// prefers-color-scheme; a composited bitmap cannot, so rebuild it.
-			ctx.on("theme/change", () => { composeFavicon(effectiveCount(), badgeSize); });
+			// prefers-color-scheme; a composited bitmap cannot, so rebuild it —
+			// forced, because the base it was built from is exactly what changed.
+			ctx.on("theme/change", () => { composeFavicon(effectiveCount(), badgeSize, true); });
 		}
 		exports.apply = apply;
 		exports.inject = inject;

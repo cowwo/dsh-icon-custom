@@ -499,6 +499,8 @@ console.log('— 合成:只有黄点也要重建图标,两颗都关才回到原�
 			'desiredIconHref', 'desiredIconType', 'iconState', 'setIconEverywhere', 'restoreShippedIcons',
 			'loadIconImage', 'document', 'FAVICON_SIZE', 'badgeScale', 'drawFaviconBadge', 'drawFaviconRunningBadge',
 			'warnFaviconCompose', 'runningTotal', 'faviconBase', 'composeSeq', 'faviconComposing', 'URL',
+			'normalizeCount', 'faviconSignature', 'faviconBadgeFitScale',
+			'faviconDrawnSignature', 'faviconPendingSignature', 'faviconFailed',
 			body + '\nreturn applyBadgeToFavicon'
 		)(
 			() => '/icon-custom.svg',
@@ -517,7 +519,13 @@ console.log('— 合成:只有黄点也要重建图标,两颗都关才回到原�
 			null,
 			0,
 			false,
-			URL
+			URL,
+			(value) => { const n = Number(value); return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0 },
+			(count, runningCount, base) => count + '|' + runningCount + '|' + base,
+			() => 1,
+			'',
+			'',
+			false
 		)
 		await fn(0, 'md')
 		return draws
@@ -530,6 +538,187 @@ console.log('— 合成:只有黄点也要重建图标,两颗都关才回到原�
 
 	const quiet = await composeCase({ running: 0, active: false })
 	check(quiet.restored === 1 && quiet.yellow === 0 && quiet.badge === 0, '两颗都没有 → 交回平台/自定义原图,不合成')
+}
+
+// —— 合成竞态与冻结:旧图不许复活、同一张图不许重复取、坏了必须重试 ——
+//
+// 每一条都对应一次真实报告:
+//   * "fav 没有角标/角标不变化" —— 归零那一瞬,还在飞的旧合成晚到一步,把清掉的数字贴回来;
+//   * 黄点画出个「0」—— 决定画不画黄点用进入时的值,数字却读画的时候的;
+//   * 画面卡死 —— 取图挂住 → 合成永远不结束 → 而看门狗只认"href 是不是 data:",
+//     就再也不重试了(本次报告的那条静默路)。
+
+console.log('— 合成竞态与冻结:旧图不许复活,失败了看门狗必须重试 —')
+{
+	const faviconRegion = slice('//#region favicon compositing', '//#endregion', 'favicon region')
+	const bridgeRegion = slice('const BADGE_SCALES =', '\t\t//#endregion\n\t\t//#region app badge', 'badge bridge')
+
+	/** 一个"页面":两个官方 link、一个记录绘制的 canvas、可控的 Image 与定时器。 */
+	function makeFaviconPage({ mode = 'ok' } = {}) {
+		const fetches = []
+		const texts = []
+		const warnings = []
+		let imageMode = mode
+		const attrs = [
+			{ href: '/favicon.svg', type: 'image/svg+xml', media: '(prefers-color-scheme: dark)' },
+			{ href: '/favicon-light.svg', type: 'image/svg+xml' }
+		]
+		const links = attrs.map((record) => ({
+			getAttribute: (key) => (key in record ? record[key] : null),
+			setAttribute: (key, value) => { record[key] = value },
+			removeAttribute: (key) => { delete record[key] }
+		}))
+		let ops = []
+		const c2d = {
+			fillStyle: '', font: '', textAlign: '', textBaseline: '',
+			save() {}, restore() {}, beginPath() {}, moveTo() {}, arcTo() {}, closePath() {},
+			fill() {}, drawImage() {},
+			fillText(text) { ops.push(text); texts.push(text) }
+		}
+		const document = {
+			baseURI: 'http://127.0.0.1:3081/',
+			head: { appendChild() {} },
+			createElement: (tag) => tag === 'canvas'
+				? { width: 0, height: 0, getContext: () => c2d, toDataURL: () => 'data:image/png;base64,' + Buffer.from(ops.join('|')).toString('base64') }
+				: { getAttribute: () => null, setAttribute() {}, removeAttribute() {} },
+			querySelectorAll: () => links
+		}
+		class PageImage {
+			set src(value) {
+				fetches.push(String(value))
+				const mode = imageMode
+				queueMicrotask(() => {
+					if (mode === 'ok') { if (this.onload) this.onload() }
+					else if (mode === 'fail') { if (this.onerror) this.onerror() }
+					// 'hang' 谁都不回调 —— 正是"取图挂住"那张报告
+				})
+			}
+			get naturalWidth() { return 512 }
+			get naturalHeight() { return 512 }
+		}
+		// 确定性定时器:替换掉真实 window,时间由测试推进。
+		let now = 0
+		let seq = 0
+		const jobs = new Map()
+		const window = {
+			setTimeout: (fn, ms) => { const id = ++seq; jobs.set(id, { at: now + Math.max(0, ms || 0), fn }); return id },
+			clearTimeout: (id) => { jobs.delete(id) }
+		}
+		const api = new Function(
+			'document', 'Image', 'window', 'console', 'Promise', 'URL', 'RUNNING_YELLOW',
+			'paintHeaderBadge', 'reconcileAppBadge',
+			bridgeRegion + '\n' + faviconRegion
+			+ '\nreturn { composeFavicon, reconcileFavicon, emitRealBadge, emitRunningState, effectiveCount, badgeSize, subscribeBadge, setIconState: (value) => { iconState = value }, setRunningSilently: (value) => { runningTotal = value } };'
+		)(document, PageImage, window, { warn: (...args) => warnings.push(args.map(String).join(' ')) }, Promise, URL, '#f5c518', () => {}, () => {})
+		ops = []
+		// 和 apply() 里一模一样的那根线:徽标一变就重合成(少了它,下面测的就只是空气)。
+		api.subscribeBadge((snapshot) => { api.composeFavicon(snapshot.count, snapshot.size) })
+		return {
+			api, fetches, texts, warnings,
+			hrefs: () => links.map((link) => link.getAttribute('href') || ''),
+			ours: () => links.every((link) => String(link.getAttribute('href') || '').slice(0, 5) === 'data:'),
+			advance: (ms) => {
+				const target = now + ms
+				for (;;) {
+					let next = null
+					for (const [id, job] of jobs) if (job.at <= target && (next === null || job.at < next.job.at)) next = { id, job }
+					if (next === null) break
+					jobs.delete(next.id)
+					now = next.job.at
+					next.job.fn()
+				}
+				now = target
+			},
+			breakImage: (value) => { imageMode = value }
+		}
+	}
+	const settle = async () => { await new Promise((r) => setTimeout(r, 0)); await new Promise((r) => setTimeout(r, 0)) }
+	const row = (id) => ({ id, title: id, where: 'w' })
+
+	// ① 归零那一瞬,旧合成晚到一步:不许把红点贴回来
+	{
+		const page = makeFaviconPage()
+		page.api.emitRealBadge(1, [row('b')])
+		await settle()
+		check(page.ours() === true, '红点 1:合成真的写上去了(否则下面测的是空气)')
+		// 同一个 tick 里:先发起一张"红 2"的合成(还在飞),紧接着归零。
+		page.api.emitRealBadge(2, [row('b'), row('c')])
+		page.api.emitRealBadge(0, [])
+		await settle()
+		check(page.ours() === false, '红 2→0(同一 tick,旧合成还在飞):回到原图,旧图没有复活(实际 ' + page.hrefs()[0] + ')')
+	}
+
+	// ② 进行中归零:不许画出只有「0」的黄角标
+	{
+		const page = makeFaviconPage()
+		page.api.emitRunningState(1, [row('a')])
+		await settle()
+		check(page.texts[page.texts.length - 1] === '1', '进行中 1:黄数字画出来了(实际 ' + JSON.stringify(page.texts) + ')')
+		// 同一 tick:一张"黄 2"还在飞,进行中就归零了
+		page.api.emitRunningState(2, [row('a'), row('d')])
+		page.api.emitRunningState(0, [])
+		await settle()
+		check(page.ours() === false, '进行中 2→0:没有任何标记要画(实际 ' + page.hrefs()[0] + ')')
+		check(page.texts.includes('0') === false, '整段过程里从没画过「0」(画过的数字 ' + JSON.stringify(page.texts) + ')')
+	}
+
+	// ③ 同一张图重复通知:只许取一次基图(公网/Caddy 下取图慢,重复取会互相顶掉)
+	{
+		const page = makeFaviconPage()
+		page.api.emitRunningState(2, [row('a'), row('d')])
+		await settle()
+		check(page.fetches.length === 1, '第一次合成取了一次基图(实际 ' + page.fetches.length + ' 次)')
+		page.api.composeFavicon(page.api.effectiveCount(), page.api.badgeSize)
+		page.api.composeFavicon(page.api.effectiveCount(), page.api.badgeSize)
+		await settle()
+		check(page.fetches.length === 1, '同一张图再通知两次,不再重复取图(实际 ' + page.fetches.length + ' 次)')
+	}
+
+	// ④ 「还是我们的 data: 图」≠「还是对的那张图」:数字变了,看门狗必须重画
+	{
+		const page = makeFaviconPage()
+		page.api.emitRunningState(1, [row('a')])
+		await settle()
+		check(page.texts[page.texts.length - 1] === '1' && page.ours() === true, '先画好的那张是「1」(实际 ' + JSON.stringify(page.texts) + ')')
+		// 数字变成 2,但通知在路上丢了(没人调 composeFavicon)——页面上还是我们的旧图
+		page.api.setRunningSilently(2)
+		page.api.reconcileFavicon()
+		await settle()
+		check(page.texts[page.texts.length - 1] === '2', '看门狗发现「不是那张」后重画成「2」(实际 ' + JSON.stringify(page.texts) + ')')
+	}
+
+	// ⑤ 合成失败:告警一次,而且看门狗必须还能再试(基图恢复后角标要出现)
+	{
+		const page = makeFaviconPage({ mode: 'fail' })
+		page.api.setIconState({ active: true, rev: 'r1', png: true, mime: 'image/png' })
+		page.api.emitRealBadge(2, [row('b'), row('c')])
+		await settle()
+		check(page.ours() === false, '基图取不到:页面上没有角标(实际 ' + page.hrefs()[0] + ')')
+		check(page.warnings.length === 1, '失败被说出来一次(实际 ' + JSON.stringify(page.warnings) + ')')
+		page.api.reconcileFavicon()
+		await settle()
+		check(page.ours() === false, '还是坏的:看门狗没有假装画好(实际 ' + page.hrefs()[0] + ')')
+		check(page.warnings.length === 1, '同一个原因不重复刷屏(实际 ' + page.warnings.length + ' 次)')
+		page.breakImage('ok')
+		page.api.reconcileFavicon()
+		await settle()
+		check(page.ours() === true, '基图恢复后,看门狗这一次真的画上了(实际 ' + page.hrefs()[0].slice(0, 22) + '…)')
+	}
+
+	// ⑥ 取图挂住:超时 → 告警 → 之后还能重试(本次报告里那条"完全静默"的路)
+	{
+		const page = makeFaviconPage({ mode: 'hang' })
+		page.api.emitRunningState(1, [row('a')])
+		await settle()
+		check(page.warnings.length === 0, '挂住期间不提告警(没有人回调,旧的写法在这里永远静默)')
+		page.advance(8000)
+		await settle()
+		check(/timeout/.test(page.warnings[0] ?? '') === true, '超时后告警一次,且写明是超时(实际 ' + JSON.stringify(page.warnings) + ')')
+		page.breakImage('ok')
+		page.api.reconcileFavicon()
+		await settle()
+		check(page.ours() === true, '挂住那次不会永远挡住重试:角标这次画上了(实际 ' + page.hrefs()[0].slice(0, 22) + '…)')
+	}
 }
 
 // —— 侧栏「工作区」标题:右上一个红数字、右下一个黄数字 ——

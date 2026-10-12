@@ -296,10 +296,15 @@ console.log('— 字典:两种语言都有角标文案 —')
 console.log('— 标签页角标:合成失败也必须说出来(异步失败接不住同步 try/catch) —')
 {
   // 真实代码:合成状态 + 告警去重 + 那个"绝不静默"的包装。
+  // 切片从 `let lastComposeError` 起,一直盖到合成层内部(签名、去重、"回原图"都在里面);
+  // `normalizeCount` / `runningTotal` 在切片之外,按真代码的形状注入,免得测的是替身。
   const region = slice('let lastComposeError = null;', '\t\t/**\n\t\t * Re-assert the tab badge', 'favicon compose')
   const warnings = []
   const consoleStub = { warn: (...args) => warnings.push(args.map(String).join(' ')) }
-  const api = new Function('Promise', 'console', region + '\nreturn { composeFavicon, setCompose: (fn) => { applyBadgeToFavicon = fn; } }')(Promise, consoleStub)
+  const api = new Function(
+    'Promise', 'console', 'normalizeCount', 'runningTotal',
+    region + '\nreturn { composeFavicon, setCompose: (fn) => { applyBadgeToFavicon = fn; } }'
+  )(Promise, consoleStub, (value) => { const n = Number(value); return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0 }, 0)
   const settle = () => new Promise((r) => setTimeout(r, 0))
   check('切片里拿到了包装函数', typeof api.composeFavicon, 'function')
 
