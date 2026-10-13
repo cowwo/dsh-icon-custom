@@ -15,6 +15,7 @@ window.__ModuleLoader__.load({
 			none: "使用平台默认图标",
 			upload: "上传图标",
 			uploadHint: "支持 SVG、PNG、ICO,最大 10 MB。SVG 会自动转成 PNG,自动适配安卓/iOS/平板的主屏图标。上传后立即生效,刷新页面也会保留。",
+			uploadHintSummary: "支持 SVG/PNG/ICO,≤10 MB,上传即生效。",
 			svgFail: "该 SVG 无法转换,请改用 PNG。",
 			reset: "恢复默认",
 			resetHint: "清除自定义图标并回到平台默认图标。",
@@ -28,12 +29,15 @@ window.__ModuleLoader__.load({
 			successReset: "已恢复默认图标",
 			pwa: "同时替换 PWA 安装图标",
 			pwaHint: "安装为应用(添加到主屏幕)后,桌面上的图标也换成这张;已安装的应用可能需要重新安装才会更新。",
+			pwaHintSummary: "装成应用后桌面图标也换成这张,可能要重装。",
 			successPwa: "PWA 图标设置已更新",
 			logo: "同时替换页面 Logo 图标",
 			logoHint: "把网页左上角品牌 logo 里的鲸鱼图标换成这张(不影响 deepseek HARNESS 文字)。",
+			logoHintSummary: "把左上角品牌 logo 里的鲸鱼换成这张。",
 			successLogo: "页面 Logo 已更新",
 			fail: "操作失败",
 			noFile: "请先选择图标文件",
+			hintMoreLabel: "查看完整说明",
 			badgeTest: "未读红点",
 			badgeSourceLabel: "数据来源:",
 			badgeSourceReal: "真实未读",
@@ -41,6 +45,7 @@ window.__ModuleLoader__.load({
 			badgeTestUnit: "0 = 不显示",
 			badgeSizeLabel: "红点大小:",
 			badgeSizeHint: "单独出现时按这三档决定大小;红黄两颗数字同时出现时(未读 + 进行中),它们会一起缩到能塞下的最大尺寸 —— 这时三档画出来是一样的,因为画布就这么大。",
+			badgeSizeHintSummary: "单独出现按三档;红黄同框时一起缩到能容纳。",
 			badgeSizeSmall: "小",
 			badgeSizeMedium: "中",
 			badgeSizeLarge: "大",
@@ -53,6 +58,9 @@ window.__ModuleLoader__.load({
 			reasonAbortedUser: "我自己停止",
 			reasonAbortedOther: "其他中断",
 			reasonPending: "有人在等我(审批/提问/计划)",
+			unreadIncludeSubagentsLabel: "子代理引起的结束也算未读",
+			unreadIncludeSubagentsHint: "后台子代理跑完时,运行时会把它所属的会话**再叫醒跑一轮**;这一项决定那一轮结束算不算未读。关掉它:由子代理唤醒的那一轮结束不再亮红点,你自己发起的一轮照旧提醒(子代理自己没有会话行,一直都不算)。打开(默认)= 和以前完全一样。判定依据是官方日志里的那条「子代理结算」消息(`subagent-settled` / `agent-message`),所以一个回合里第一条消息是谁发的就决定了这一轮的归属;**你中途在同一条会话里插话**不会把已经记下的归属改写。",
+			unreadIncludeSubagentsHintSummary: "子代理唤醒的那一轮结束算不算未读。默认算。",
 			unreadPanelShort: "待处理",
 			unreadPanelCount: "{n} 个待处理",
 			unreadPanelNone: "暂无待处理",
@@ -76,10 +84,13 @@ window.__ModuleLoader__.load({
 			ageYears: "{n}年",
 			workspaceDotLabel: "在工作区和会话行上显示红点(实验)",
 			workspaceDotHint: "在侧栏工作区那一行的文件夹图标上点一个小红点(收起的工作区里有多少未读,就看它),有未读的会话在其标题右边也跟一个小红点。会话行上的点只在那一行真的显示着时才画:折叠起来的会话由工作区那一行的点和「待处理」清单代表。这一项是贴着页面结构做的,DSH 升级后可能失效;失效时只会变成\"不显示\",不会影响红点数字、清单、跳转这些功能,随时可以关掉它。",
+			workspaceDotHintSummary: "工作区文件夹和会话行上加小红点(实验,可能失效)。",
 			revealLabel: "点清单里的会话时,在侧栏定位到它(实验)",
 			revealHint: "点「待处理」或「进行中」清单里的一条时,除了打开那个会话,还会在侧栏把它所在的工作区展开、滚到那一行、并闪一下。这是贴着页面结构做的:官方只把\"展开 + 滚动\"留给了它自己的搜索框,没有给插件留接口,所以这里只能模拟点击官方的工作区行和「显示更多」。DSH 升级后可能失效,失效的表现只是\"侧栏不动\",打开会话完全不受影响。**展开状态是官方自己记住的**(存在浏览器里),所以它不会自己收回去——不想要就手动收起那个工作区,或者关掉这个开关。",
+			revealHintSummary: "点清单时在侧栏展开并闪一下(实验,可能失效)。",
 			appBadgeLabel: "在系统应用图标上显示红点",
 			appBadgeHint: "安装为应用后,把同一个数字也放到系统图标上:Windows 是任务栏图标上的角标,macOS 是 Dock 角标,iOS 是主屏图标上的数字。样子由系统决定——Windows 上 Chrome 画深色圆+白字,Edge 走 Windows 系统徽章通道(是否显示数字由 Edge/Windows 决定);插件会周期重设数字,但只在应用窗口开着时更新。Safari 的程序坞网页应用 / 主屏应用还要先允许通知(见下面的「通知权限」),否则角标不会出现。",
+			appBadgeHintSummary: "把同一个数字也放到系统应用图标上。",
 			appBadgeFootnote: "角标只在应用窗口开着时由本插件更新;数字超过 99 时由系统显示为 99+。",
 			appBadgeProbeInstalled: "当前环境:已安装为应用,本机可以设置角标。是否真正显示由系统决定。",
 			appBadgeProbeTab: "当前环境:浏览器标签页(不是安装的应用)——安装为应用后才会显示角标。",
@@ -92,15 +103,25 @@ window.__ModuleLoader__.load({
 			notificationPermissionUnsupported: "本机浏览器没有通知能力",
 			notificationPermissionButton: "允许通知",
 			notificationPermissionHint: "Chrome / Edge 的角标不需要这一步;Safari 不一样——macOS 的「添加到程序坞」网页应用和 iOS 的主屏应用,只有在你允许通知之后才会画出角标(Apple 把角标权限绑在通知权限上)。这里只申请权限,本插件目前不会给你发通知。",
-			badgeTestHint: "真实未读 = 有会话发生了上面勾选的情况、而且你还没看过它(打开该会话即视为已读)。你正开着的会话也算——窗口可能被最小化、页面可能切到后台,这里无从判断你在不在看,所以不做这个区分。只有子代理不计。手动模式:自己填数字试看效果。刷新页面后回到真实未读。",
+			notificationPermissionHintSummary: "只有 Safari 系(iOS/macOS)需要先允许通知。",
+			badgeTestHint: "真实未读 = 有会话发生了上面勾选的情况、而且你还没看过它(打开该会话即视为已读)。你正开着的会话也算——窗口可能被最小化、页面可能切到后台,这里无从判断你在不在看,所以不做这个区分。子代理是否计入,由上方「子代理引起的结束也算未读」开关决定。手动模式:自己填数字试看效果。刷新页面后回到真实未读。",
+			badgeTestHintSummary: "真实未读 = 勾选情况发生且你没看过;子代理看上方的开关。",
 			clearDelayLabel: "进入会话后多久算已读:",
 			clearDelayUnit: "秒",
 			clearDelayHint: "填 0 = 进去就算已读(红点立即消失)。大于 0 时,你要在那个会话里连续待满这么多秒它才算看过:中途切走会清零重数,刷新页面也重新数。**计时只认\"你进入会话时已经存在的结束\"**——你人已经在里面的时候又跑完一轮,那一轮不算数:它会一直亮着,等你切走再进来才会清。上限 600 秒。**切到「插件/设置」页、或把标签页切到后台,都只是暂停计时,不会因此清掉红点**(它们不算离开);真正算离开的只有一件事:**去别的会话**。已读记在宿主($DSH_HOME/custom-favicon/unread-seen.json):任何一台设备上看过,所有设备都不再提醒;浏览器那份只是缓存,清站点数据不会把已读丢回去。",
+			clearDelayHintSummary: "0 = 进去即已读;>0 要连续待满,上限 600 秒。",
 			/** 进行中黄点(0.18.0):官方 running 的第二次投影,与红点互不牵连。 */
 			runningMarkSection: "进行中黄点",
 			runningMarkLabel: "显示进行中标记(标题数字 / 文件夹与会话行 / 左上角 / 标签页)",
 			runningMarkCount: "{n} 个进行中",
-			runningMarkHint: "黄点就是官方的「进行中」:会话有回合正在跑、而且没有停下来等你(停下等你的时候,官方那一行显示琥珀色的「等待审批 / 等待回答」,黄点也就不亮)。它和未读红点完全独立、各画各的:侧栏「工作区」标题后面是黄色数字——此刻全局有几个会话在跑(和红数字上下排:右上红、右下黄);工作区文件夹图标上是黄点,有未读时红点在左、黄点在右;会话行上同样是红点在左、黄点在右;左上角 Logo 与标签页图标右下角也是同一个数字,红数字仍占右上角。事实全部来自官方(会话列表里每个会话的 `running`)——插件不落盘、不推断,所以刷新页面立刻是对的,进程重启也不会留下一个永远亮着的黄点。关掉这个开关,红点完全不受影响。"
+			runningMarkHint: "黄点就是官方的「进行中」:会话有回合正在跑、而且没有停下来等你(停下等你的时候,官方那一行显示琥珀色的「等待审批 / 等待回答」,黄点也就不亮)。它和未读红点完全独立、各画各的:侧栏「工作区」标题后面是黄色数字——此刻全局有几个会话在跑(和红数字上下排:右上红、右下黄);工作区文件夹图标上是黄点,有未读时红点在左、黄点在右;会话行上同样是红点在左、黄点在右;左上角 Logo 与标签页图标右下角也是同一个数字,红数字仍占右上角。事实全部来自官方(会话列表里每个会话的 `running`)——插件不落盘、不推断,所以刷新页面立刻是对的,进程重启也不会留下一个永远亮着的黄点。关掉这个开关,红点完全不受影响。",
+			runningMarkHintSummary: "黄点就是官方的进行中,和红点各自独立、互不影响。",
+			runningIncludeSubagentsLabel: "把子代理的「进行中」算到它所属的会话上",
+			runningIncludeSubagentsHint: "子代理(子会话)在侧栏里没有自己的那一行,所以它正在跑的时候,它上面那个真正属于你的会话看上去是空闲的。打开这个开关:有子代理在跑,就把最顶层那个不是子代理的祖先会话记为进行中——黄点/黄数字反映的是「有活正在干」,而不只是「你亲手开的会话在跑」。同一个祖先下好几个子代理同时跑,只算一次(数字始终是会话数,不是子代理数);子代理自己那一行照旧不画。祖先会话正在等你(官方那行是琥珀色)时不计。关掉就完全回到旧行为:所有子代理一律不计。",
+			runningIncludeSubagentsHintSummary: "子代理在跑就把最顶层祖先会话记为进行中。",
+			headerRingLabel: "在会话头部的子代理计数上叠一个黄圈",
+			headerRingHint: "聊天区顶部那颗「N 个子智能体」的计数,右上角会叠一个小黄圈:只在**有直接子代理正在运行**时出现,里面的数字就是它们此刻的个数——不含更深一层的孙代理,同一个直接子代理只算一次,超过 99 显示 `99+`。它只是个数字:**不能点**,也不拦截任何点击,更不会改动画面的排版;会话头部那颗计数本身的文字和点击照旧,官方按钮的朗读里已经含运行数,所以它对着屏幕阅读器是隐藏的。关掉这个开关,其他地方的红黄点、左上角数字、标签页图标与系统角标一个都不受影响。子代理自己的会话页不显示官方那行,这个黄圈自然也不会出现。",
+			headerRingHintSummary: "只在有直接子代理在跑时,会话头部计数右上角叠一个黄圈。"
 		};
 		const en = {
 			nav: "Favicon",
@@ -108,6 +129,7 @@ window.__ModuleLoader__.load({
 			none: "Using the platform default icon",
 			upload: "Upload",
 			uploadHint: "SVG, PNG or ICO, up to 10 MB. SVG is auto-rasterized to PNG, and sizes are derived to fit Android/iOS/tablet home-screen icons. Applies instantly and persists across reloads.",
+			uploadHintSummary: "SVG, PNG or ICO up to 10 MB; applies at once and persists.",
 			svgFail: "This SVG could not be rasterized. Use a PNG instead.",
 			reset: "Reset",
 			resetHint: "Clear the custom icon and use the platform default.",
@@ -121,12 +143,15 @@ window.__ModuleLoader__.load({
 			successReset: "Default icon restored",
 			pwa: "Also replace the PWA app icon",
 			pwaHint: "The icon used after installing the site as an app (add to home screen). Already-installed apps may need a reinstall to pick it up.",
+			pwaHintSummary: "The icon after installing as an app; may need a reinstall.",
 			successPwa: "PWA icon setting updated",
 			logo: "Also replace the page logo mark",
 			logoHint: "Replaces the whale mark beside the brand name in the top-left (the deepseek HARNESS text stays).",
+			logoHintSummary: "Swaps the whale mark inside the top-left brand logo.",
 			successLogo: "Page logo updated",
 			fail: "Operation failed",
 			noFile: "Choose a file first",
+			hintMoreLabel: "Show full description",
 			badgeTest: "Unread badge",
 			badgeSourceLabel: "Number source:",
 			badgeSourceReal: "Real unread",
@@ -134,6 +159,7 @@ window.__ModuleLoader__.load({
 			badgeTestUnit: "0 = hidden",
 			badgeSizeLabel: "Badge size:",
 			badgeSizeHint: "A number shown on its own uses this size; when the red and the yellow number share the icon (unread + running) they shrink together to the largest pair that fits — the three sizes then draw the same, because the canvas is the constraint.",
+			badgeSizeHintSummary: "Used when alone; both numbers shrink together to fit.",
 			badgeSizeSmall: "Small",
 			badgeSizeMedium: "Medium",
 			badgeSizeLarge: "Large",
@@ -146,6 +172,9 @@ window.__ModuleLoader__.load({
 			reasonAbortedUser: "I stopped it",
 			reasonAbortedOther: "Other cancel",
 			reasonPending: "Someone is waiting",
+			unreadIncludeSubagentsLabel: "Count sub-agent activity as unread",
+			unreadIncludeSubagentsHint: "When a background sub-agent finishes, the runtime **wakes its parent session for one more turn**; this decides whether that turn's ending lights the red dot. Off: endings caused by a sub-agent stop lighting it, while a turn you started still notifies you (a sub-agent has no session row of its own and never counted). On (default) = exactly the old behaviour. The judgement comes from the official settlement notice in the log (`subagent-settled` / `agent-message`), so whichever message opened a turn owns that turn; typing into the same session halfway through does not rewrite an attribution already recorded.",
+			unreadIncludeSubagentsHintSummary: "Whether a sub-agent-woken turn counts as unread; on by default.",
 			unreadPanelShort: "Pending",
 			unreadPanelCount: "{n} pending",
 			unreadPanelNone: "Nothing pending",
@@ -169,10 +198,13 @@ window.__ModuleLoader__.load({
 			ageYears: "{n}y",
 			workspaceDotLabel: "Dots on workspace and session rows (experimental)",
 			workspaceDotHint: "Adds a small red dot to the folder icon of each workspace row (a collapsed workspace shows how many of its sessions are unread there), and one beside the title of every unread session row. A session dot is only drawn while that row is really rendered: folded sessions are represented by their workspace row's dot and the pending panel. This one reads the page structure, so a DSH upgrade may break it; when it does it simply stops showing, never affecting the counts, the list, or navigation. Turn it off any time.",
+			workspaceDotHintSummary: "Small dots on workspace folders and session rows (experimental).",
 			revealLabel: "Locate the session in the sidebar when a list row is clicked (experimental)",
 			revealHint: "Clicking a row in the \"needing you\" or \"running\" list opens that session AND, in the sidebar, expands its workspace, scrolls to the row and flashes it once. This reads the page structure: the official sidebar keeps expand-and-scroll for its own search box and exposes no interface for it, so this drives the shipped workspace row and \"show more\" button the way a click would. A DSH upgrade may break it, and the only symptom is a sidebar that does not move — opening the session is never affected. **The expanded state is remembered by the official sidebar itself** (in the browser), so it will not collapse again on its own: collapse that workspace by hand, or turn this off.",
+			revealHintSummary: "Expands and flashes the session's sidebar row (experimental).",
 			appBadgeLabel: "Badge the system app icon",
 			appBadgeHint: "Once installed as an app, the same number also goes to the system icon: a taskbar badge on Windows, a Dock badge on macOS, a number on the iOS home-screen icon. The system decides how it looks — on Windows, Chrome draws a dark circle with white text, while Edge goes through the Windows badge channel (whether it shows the number is up to Edge/Windows). The plugin re-asserts the number periodically, but only while the app window is open. Safari's Dock and home-screen web apps additionally need notifications allowed first (see the permission row below), or the badge never appears.",
+			appBadgeHintSummary: "Puts the same number onto the system app icon.",
 			appBadgeFootnote: "The badge is only updated by this plugin while the app window is open; above 99 the system shows 99+.",
 			appBadgeProbeInstalled: "This environment: installed as an app, so this device can set a badge. Whether it actually appears is up to the system.",
 			appBadgeProbeTab: "This environment: a browser tab (not an installed app) — install as an app to get a badge.",
@@ -185,15 +217,25 @@ window.__ModuleLoader__.load({
 			notificationPermissionUnsupported: "this browser has no Notification API",
 			notificationPermissionButton: "Allow notifications",
 			notificationPermissionHint: "A badge needs no notification permission on Chrome / Edge, but Safari is different: a macOS web app added to the Dock (or an iOS home-screen web app) only draws its badge once you allow notifications — Apple ties the two together. This only asks for the permission; the plugin does not send notifications.",
-			badgeTestHint: "Real unread = a session ended for one of the checked reasons and you have not looked at it yet (opening a session marks it read). The session you are viewing counts too — the window may be minimised or the page in the background, so this half cannot tell whether you are looking, and does not pretend to. Only sub-agents never count. Manual = type a number to preview. Resets to Real on reload.",
+			notificationPermissionHintSummary: "Only Safari (iOS/macOS) needs notifications allowed first.",
+			badgeTestHint: "Real unread = a session ended for one of the checked reasons and you have not looked at it yet (opening a session marks it read). The session you are viewing counts too — the window may be minimised or the page in the background, so this half cannot tell whether you are looking, and does not pretend to. Whether sub-agents count is decided by the \"Count sub-agent activity as unread\" switch above. Manual = type a number to preview. Resets to Real on reload.",
+			badgeTestHintSummary: "Real unread = a checked ending you have not seen; sub-agents follow the switch above.",
 			clearDelayLabel: "Mark read after staying:",
 			clearDelayUnit: "seconds",
 			clearDelayHint: "0 = read as soon as you enter (the dot clears at once). Above 0 you must stay in that session for this many seconds before it counts as read: leaving it resets the clock, and so does a reload. The clock only ever covers **the ending that was already there when you entered** — a turn that finishes while you are sitting in the session does not count: it stays red until you leave and come back. Capped at 600 seconds. A settings or plugins page, or a tab in the background, only **pauses** the clock — neither clears a dot (neither counts as leaving); the one thing that does count as leaving is **opening another session**. Read state lives on the Host ($DSH_HOME/custom-favicon/unread-seen.json): read on any device means read on every device, and the browser's own copy is only a cache — clearing site data no longer throws it away.",
+			clearDelayHintSummary: "0 = read at once; above 0, stay that long (max 600s).",
 			/** Running mark (0.18.0): a second projection of the official `running`. */
 			runningMarkSection: "Running marks",
 			runningMarkLabel: "Show running marks (header number / folder and session rows / top-left / tab)",
 			runningMarkCount: "{n} running",
-			runningMarkHint: "The yellow mark IS the official \"running\": the session has a turn in flight and is not parked waiting for you (while it waits, the official row shows the amber \"waiting for approval / waiting for answer\" and the yellow goes dark). It is completely independent of the unread red dot, and each draws its own mark: after the sidebar's \"工作区\" label sits the yellow NUMBER of sessions running right now (stacked against the red number — red top-right, yellow bottom-right); the workspace folder icon gets a yellow dot with the red dot to its left; a session row is red left, yellow right; and the top-left logo plus the bottom-right of the tab icon carry the same number, with the red number keeping its top-right corner. Every fact comes from the official host (each session's `running` in the session list); the plugin stores nothing and infers nothing, so a reload is immediately right and a process restart never leaves a yellow mark stuck on. Turning this off does not affect the red dot at all."
+			runningMarkHint: "The yellow mark IS the official \"running\": the session has a turn in flight and is not parked waiting for you (while it waits, the official row shows the amber \"waiting for approval / waiting for answer\" and the yellow goes dark). It is completely independent of the unread red dot, and each draws its own mark: after the sidebar's \"工作区\" label sits the yellow NUMBER of sessions running right now (stacked against the red number — red top-right, yellow bottom-right); the workspace folder icon gets a yellow dot with the red dot to its left; a session row is red left, yellow right; and the top-left logo plus the bottom-right of the tab icon carry the same number, with the red number keeping its top-right corner. Every fact comes from the official host (each session's `running` in the session list); the plugin stores nothing and infers nothing, so a reload is immediately right and a process restart never leaves a yellow mark stuck on. Turning this off does not affect the red dot at all.",
+			runningMarkHintSummary: "The yellow mark is the official running state, independent of red dots.",
+			runningIncludeSubagentsLabel: "Count sub-agent activity under the session that owns it",
+			runningIncludeSubagentsHint: "A sub-agent (child session) has no row of its own in the sidebar, so while it works the real session above it looks idle. Turn this on: when a sub-agent is running, the topmost non-sub-agent ancestor session is credited as running — the yellow mark and number then reflect \"work is in flight\", not merely \"a session you opened is running\". Several sub-agents under one ancestor count once (the number stays a session count, never a sub-agent count), and the sub-agent row itself is still never drawn. An ancestor that is itself parked waiting for you (the official row is amber) is not counted. Turn it off and the old behaviour returns exactly: every sub-agent is ignored.",
+			runningIncludeSubagentsHintSummary: "Credits the topmost ancestor session while a sub-agent runs.",
+			headerRingLabel: "Draw a yellow ring on the header's sub-agent count",
+			headerRingHint: "The \"N sub-agents\" count at the top of the chat area gets a small yellow ring on its top-right corner: it appears only while **direct sub-agents are running**, and the number inside is how many of them are active right now — it never counts deeper grandchildren, and one direct sub-agent counts once; above 99 it reads `99+`. It is a number only: **it is not clickable**, it swallows no pointer events, and it never changes the layout; the header count keeps its own text and its own click, and because the official button's label already announces the running count the ring is hidden from screen readers. Turning this switch off leaves every other red/yellow mark, the top-left number, the tab icon and the system badge untouched. A sub-agent's own conversation renders none of that header row, so no ring appears there either.",
+			headerRingHintSummary: "A yellow ring on the header count while direct sub-agents run."
 		};
 		//#endregion
 
@@ -313,7 +355,9 @@ window.__ModuleLoader__.load({
 		const UNREAD_APP_BADGE_FALLBACK = true;
 		/** Mirror of the host's default (see lib/unread.js) — locating a clicked row is on. */
 		const UNREAD_REVEAL_FALLBACK = true;
-		let unreadConfig = { reasons: { ...UNREAD_FALLBACK_REASONS }, pending: true, workspaceDot: true, appBadge: UNREAD_APP_BADGE_FALLBACK, clearDelaySec: 0, revealOnOpen: UNREAD_REVEAL_FALLBACK };
+		/** Mirror of the host's default (see lib/unread.js) — sub-agent-caused endings count as unread. */
+		const UNREAD_INCLUDE_SUBAGENTS_FALLBACK = true;
+		let unreadConfig = { reasons: { ...UNREAD_FALLBACK_REASONS }, pending: true, workspaceDot: true, appBadge: UNREAD_APP_BADGE_FALLBACK, clearDelaySec: 0, revealOnOpen: UNREAD_REVEAL_FALLBACK, unreadIncludeSubagents: UNREAD_INCLUDE_SUBAGENTS_FALLBACK };
 		const unreadConfigListeners = new Set();
 		/** Mirror of the host's normalizer: any input becomes an integer 0..cap seconds. */
 		function normalizeClearDelay(input) {
@@ -336,7 +380,12 @@ window.__ModuleLoader__.load({
 				workspaceDot: typeof source.workspaceDot === "boolean" ? source.workspaceDot : true,
 				appBadge: typeof source.appBadge === "boolean" ? source.appBadge : UNREAD_APP_BADGE_FALLBACK,
 				clearDelaySec: normalizeClearDelay(source.clearDelaySec),
-				revealOnOpen: typeof source.revealOnOpen === "boolean" ? source.revealOnOpen : UNREAD_REVEAL_FALLBACK
+				revealOnOpen: typeof source.revealOnOpen === "boolean" ? source.revealOnOpen : UNREAD_REVEAL_FALLBACK,
+				// Missing or dirty falls back to ON (= today's behaviour): an old host that
+				// never heard of this field must not make the badge quieter. Spelled as a
+				// literal like `pending` / `workspaceDot` above, so a partial slice of this
+				// normalizer (the tests take exactly this function) needs no extra constant.
+				unreadIncludeSubagents: typeof source.unreadIncludeSubagents === "boolean" ? source.unreadIncludeSubagents : true
 			};
 		}
 		function emitUnreadConfig(input) {
@@ -365,11 +414,35 @@ window.__ModuleLoader__.load({
 		const RUNNING_YELLOW = "#f5c518";
 		/** Mirror of the host default (lib/running.js). */
 		const RUNNING_MARK_FALLBACK = true;
-		let runningConfig = { enabled: RUNNING_MARK_FALLBACK };
+		/**
+		 * Mirror of the host's second running default (lib/running.js): rolling a
+		 * running sub-agent up to the ancestor session that owns it is ON. The two
+		 * questions are independent — whether to draw the marks at all is not the same
+		 * as whether work you cannot see should light the session it belongs to.
+		 */
+		const RUNNING_INCLUDE_SUBAGENTS_FALLBACK = true;
+		/**
+		 * Mirror of the host's third running default (lib/running.js): the yellow ring
+		 * on the conversation header's sub-agent count is ON. A third, independent
+		 * question — the two above decide whether marks are drawn at all and whether a
+		 * sub-agent's work is credited to its ancestor; this one only decides whether
+		 * that one header count also carries a running number. It feeds no other count.
+		 */
+		const RUNNING_HEADER_RING_FALLBACK = true;
+		let runningConfig = { enabled: RUNNING_MARK_FALLBACK, includeSubagents: RUNNING_INCLUDE_SUBAGENTS_FALLBACK, headerRing: RUNNING_HEADER_RING_FALLBACK };
 		const runningConfigListeners = new Set();
 		function normalizeRunningConfig(input) {
 			const source = input !== null && typeof input === "object" ? input : {};
-			return { enabled: typeof source.enabled === "boolean" ? source.enabled : RUNNING_MARK_FALLBACK };
+			// `typeof` (not a bare read) keeps this normalizer usable when a regression
+			// test lifts it out of the module: an absent mirror is simply the default.
+			const enabledFallback = typeof RUNNING_MARK_FALLBACK === "boolean" ? RUNNING_MARK_FALLBACK : true;
+			const includeFallback = typeof RUNNING_INCLUDE_SUBAGENTS_FALLBACK === "boolean" ? RUNNING_INCLUDE_SUBAGENTS_FALLBACK : true;
+			const headerRingFallback = typeof RUNNING_HEADER_RING_FALLBACK === "boolean" ? RUNNING_HEADER_RING_FALLBACK : true;
+			return {
+				enabled: typeof source.enabled === "boolean" ? source.enabled : enabledFallback,
+				includeSubagents: typeof source.includeSubagents === "boolean" ? source.includeSubagents : includeFallback,
+				headerRing: typeof source.headerRing === "boolean" ? source.headerRing : headerRingFallback
+			};
 		}
 		function emitRunningConfig(input) {
 			runningConfig = normalizeRunningConfig(input);
@@ -787,7 +860,17 @@ window.__ModuleLoader__.load({
 		/**
 		 * How many sessions deserve the badge right now: endings whose reason is
 		 * enabled and that this browser has not seen since, plus sessions waiting
-		 * for you (when that source is enabled). Only sub-agent sessions never count.
+		 * for you (when that source is enabled). Sub-agent sessions never count on
+		 * their own; whether an ending caused by a sub-agent's settlement counts is
+		 * decided by the `unreadIncludeSubagents` rule, not by this function.
+		 *
+		 * A PARENT session woken by a sub-agent settling is a second kind of
+		 * sub-agent-caused unread: the child has no row of its own, but its
+		 * settlement notice makes the parent run a turn, and that turn's ending used
+		 * to light the parent's dot. The fold marks those endings
+		 * (`subagentCaused`, see lib/unread.js) instead of hiding them, and this
+		 * function drops them only while the rule says so — the fact stays in the
+		 * projection either way, so flipping the switch never re-folds a log.
 		 *
 		 * The session you are LOOKING AT counts too. It used to be excluded, on the
 		 * theory that "you have it open, so you have seen it" — but that premise is
@@ -805,6 +888,9 @@ window.__ModuleLoader__.load({
 		 */
 		function collectUnread(list, pending, config, seen, lit) {
 			const reasons = config !== null && typeof config === "object" && config.reasons !== null && typeof config.reasons === "object" ? config.reasons : {};
+			// Absent, dirty or an old host's answer → ON (= everything this function
+			// did before the switch existed).
+			const includeSubagents = !(config !== null && typeof config === "object" && config.unreadIncludeSubagents === false);
 			// The watermark is a parameter, not module state: this stays a pure
 			// decision function that a test can drive with any marks it likes.
 			const marks = seen !== null && typeof seen === "object" ? seen : {};
@@ -823,6 +909,12 @@ window.__ModuleLoader__.load({
 					const values = entry.projectionValues;
 					const value = values !== null && typeof values === "object" ? values[LAST_TURN_END_KEY] : undefined;
 					if (value === null || typeof value !== "object") continue;
+					// The switch is OFF: an ending the fold attributed to a sub-agent
+					// settling is not news for the person sitting here. This is NOT the
+					// reason-toggle exception below — that one protects an already lit dot
+					// from a vocabulary change, while this one is the user explicitly
+					// saying they do not want this class of news at all.
+					if (!includeSubagents && value.subagentCaused === true) continue;
 					const endAt = typeof value.endAt === "number" ? value.endAt : 0;
 					const seenAt = marks[id];
 					if (endAt <= 0 || typeof seenAt !== "number" || endAt <= seenAt) continue;
@@ -877,12 +969,20 @@ window.__ModuleLoader__.load({
 		 *     so it is NOT running here either. That is why a session with the
 		 *     amber dot never also gets a yellow one.
 		 *
-		 * Sub-agent sessions are skipped for the same reason `collectUnread` skips
-		 * them: they are not part of the browsing the user does (ui-workspace's
-		 * `sessionVisible` hides them outright), so counting them would leave the
-		 * mark lit by work nobody can open.
+		 * Sub-agent sessions get no ids of their own for the same reason
+		 * `collectUnread` skips them: they are not part of the browsing the user does
+		 * (ui-workspace's `sessionVisible` hides them outright), so a mark on their row
+		 * would point at work nobody can open. With `includeSubagents` on (the
+		 * default), a running sub-agent still credits the topmost non-sub-agent
+		 * ancestor session that owns it, walking `parentSessionId` upwards: that is the
+		 * session the user actually opened, and without the roll-up it looks idle while
+		 * its sub-agents work. Several sub-agents under one ancestor collapse into that
+		 * single id, so the number stays a count of sessions. The ancestor's own
+		 * `pendingInteraction` still wins, switch or no switch: a session parked
+		 * waiting for you is never also "running".
 		 * @param list - the session list snapshot (may be absent).
 		 * @param status - the official session-status map (may be absent).
+		 * @param includeSubagents - optional override for the switch; absent means "ask the live config", whose documented default is ON.
 		 * @returns the running session ids, in list order.
 		 */
 		function runningSessionIds(list, status) {
@@ -893,17 +993,68 @@ window.__ModuleLoader__.load({
 			const lookup = status !== null && status !== undefined && typeof status.get === "function"
 				? (id) => status.get(id)
 				: () => undefined;
+			// The roll-up switch. A third argument wins (the regression tests drive it
+			// that way); otherwise the live config answers, and a copy lifted out of the
+			// module with no config in scope is the documented default: ON.
+			const includeSubagents = arguments.length > 2
+				? arguments[2] !== false
+				: !(typeof runningConfig === "object" && runningConfig !== null && runningConfig.includeSubagents === false);
+			/** Is this row parked waiting for the user (the amber state)? */
+			const waitingForYou = (id) => {
+				const row = lookup(id);
+				return row !== null && typeof row === "object" && row.pendingInteraction !== null && row.pendingInteraction !== undefined;
+			};
+			/** The official running fact for a row, sidebar precedence, minus the wait state. */
+			const isRunning = (id) => {
+				if (waitingForYou(id)) return false;
+				const row = lookup(id);
+				const known = row !== null && typeof row === "object";
+				const entry = byId[id];
+				const running = known && typeof row.running === "boolean"
+					? row.running
+					: entry !== null && typeof entry === "object" ? entry.running : undefined;
+				return running === true;
+			};
+			/**
+			 * Up the `parentSessionId` chain to the topmost ancestor that is not itself a
+			 * sub-agent. A broken, cyclic or unknown chain yields "" (unattributable):
+			 * guessing an owner would light a session that has nothing to do with the
+			 * sub-agent.
+			 */
+			const ownerOf = (id) => {
+				let current = id;
+				const walked = new Set([id]);
+				for (let hops = 0; hops < 64; hops++) {
+					const entry = byId[current];
+					const parent = entry !== null && typeof entry === "object" && typeof entry.parentSessionId === "string" ? entry.parentSessionId : "";
+					if (parent === "" || walked.has(parent)) return "";
+					walked.add(parent);
+					const next = byId[parent];
+					if (next !== null && typeof next === "object" && next.origin === "subagent") {
+						current = parent;
+						continue;
+					}
+					if (next === null || typeof next !== "object") return "";
+					return parent;
+				}
+				return "";
+			};
+			/** Ancestors are deduplicated: two sub-agents under one parent are one session. */
+			const push = (id) => { if (!out.includes(id)) out.push(id); };
 			for (const id of order) {
 				if (typeof id !== "string" || id === "") continue;
 				const entry = byId[id];
 				if (entry === null || typeof entry !== "object") continue;
-				if (entry.origin === "subagent") continue;
-				const row = lookup(id);
-				const known = row !== null && typeof row === "object";
-				if (known && row.pendingInteraction !== null && row.pendingInteraction !== undefined) continue;
-				const running = known && typeof row.running === "boolean" ? row.running : entry.running;
-				if (running !== true) continue;
-				out.push(id);
+				if (entry.origin === "subagent") {
+					if (!includeSubagents || !isRunning(id)) continue;
+					const owner = ownerOf(id);
+					// Only the ancestor's own wait state counts: the sub-agent has no row, so
+					// it can never be the session the user is being asked about.
+					if (owner !== "" && !waitingForYou(owner)) push(owner);
+					continue;
+				}
+				if (!isRunning(id)) continue;
+				push(id);
 			}
 			return out;
 		}
@@ -2666,6 +2817,274 @@ window.__ModuleLoader__.load({
 		}
 		//#endregion
 
+		//#region header ring
+		/**
+		 * One yellow ring on the conversation header's sub-agent count.
+		 *
+		 * The official "N sub-agents" row is a `button[aria-haspopup="tree"]` inside
+		 * the `conversation.session.header.actions` slot, and its count is the LAST
+		 * `<span>` child of that button. The ring is stacked on that span's top-right
+		 * corner — the same corner logic as the workspace folder's yellow dot — and it
+		 * is display only: not clickable, `pointer-events:none`, `aria-hidden` because
+		 * the official button's own label already announces the running count.
+		 *
+		 * The number is the official `subagentCatalog` projection of the session on
+		 * screen, counting only DIRECT children that are running. It never joins any
+		 * other count this plugin draws (sidebar dots, the top-left number, the tab
+		 * icon, the OS badge), so this switch can never move one of them.
+		 *
+		 * Class names are build hashes and are never used; the anchor is found by the
+		 * official `data-slot` plus structure/role only. Like the sidebar marks this
+		 * half is injected into shipped DOM, reconciled instead of redrawn, quiet when
+		 * it cannot find the anchor, and self-disabling after repeated failures.
+		 */
+		const HEAD_RING_ATTR = "data-icon-custom-headring";
+		/** Marks the count element whose inline `position` we changed, for restore. */
+		const HEAD_RING_HOST_ATTR = "data-icon-custom-headring-host";
+		/** Breaker ceiling: a changed header structure must not warn forever. */
+		const HEAD_RING_MAX_FAILURES = 20;
+		/** The number for the session on screen; -1 means "no answer, draw nothing". */
+		let headerRingValue = -1;
+		let headerRingFailures = 0;
+		let headerRingGivenUp = false;
+		let headerRingHost = null;
+		let headerRingHostPosition = "";
+		let headerRingObserved = null;
+		let headerRingObserver = null;
+		/** The session service lookup, filled in by `apply` (may stay null). */
+		let headerRingSessions = null;
+		/** Throttle for the "catalog projection not loaded yet" refresh ask. */
+		let headerRingRefreshSession = "";
+		let headerRingRefreshAt = 0;
+
+		/**
+		 * How many DIRECT children of `sessionId` are running, from the official
+		 * `subagentCatalog` projection.
+		 *
+		 * Grandchildren are not part of a parent's catalog, so they are excluded by
+		 * construction. `status` (the official session-status map) wins over the list
+		 * row exactly the way the shipped sidebar reads it. An unloaded projection is
+		 * 0, never a guess.
+		 * @param list - the session list snapshot (may be absent).
+		 * @param status - the official session-status map (may be absent).
+		 * @param sessionId - the session whose header is on screen.
+		 * @returns the count of running direct children.
+		 */
+		function headerRingCount(list, status, sessionId) {
+			if (typeof sessionId !== "string" || sessionId === "") return 0;
+			if (list === null || typeof list !== "object") return 0;
+			const projections = list.projectionsBySession;
+			if (projections === null || typeof projections !== "object") return 0;
+			const snapshot = projections[sessionId];
+			const values = snapshot !== null && typeof snapshot === "object" ? snapshot.values : undefined;
+			const catalog = values !== null && typeof values === "object" ? values.subagentCatalog : undefined;
+			if (!Array.isArray(catalog)) return 0;
+			const byId = list.byId !== null && typeof list.byId === "object" ? list.byId : {};
+			const lookup = status !== null && status !== undefined && typeof status.get === "function" ? (id) => status.get(id) : () => undefined;
+			let count = 0;
+			for (const entry of catalog) {
+				if (entry === null || typeof entry !== "object" || typeof entry.id !== "string" || entry.id === "") continue;
+				const row = lookup(entry.id);
+				const known = row !== null && typeof row === "object" && typeof row.running === "boolean";
+				const fallback = byId[entry.id];
+				const running = known ? row.running : fallback !== null && typeof fallback === "object" ? fallback.running : undefined;
+				if (running === true) count++;
+			}
+			return count;
+		}
+
+		/**
+		 * Whether that session's catalog projection is loaded at all. `undefined`
+		 * means "not asked yet" — the one case worth nudging the host about (see
+		 * `requestHeaderRingRefresh`); an empty array is a real answer.
+		 */
+		function headerRingCatalogLoaded(list, sessionId) {
+			if (list === null || typeof list !== "object" || typeof sessionId !== "string" || sessionId === "") return false;
+			const projections = list.projectionsBySession;
+			const snapshot = projections !== null && typeof projections === "object" ? projections[sessionId] : undefined;
+			const values = snapshot !== null && typeof snapshot === "object" ? snapshot.values : undefined;
+			return values !== null && typeof values === "object" && Array.isArray(values.subagentCatalog);
+		}
+
+		/**
+		 * Ask the host to fold that session's projections, at most once per 10 s. The
+		 * service lookup is optional (`apply` fills it in): without it the next render
+		 * simply tries again, which is the documented fallback.
+		 */
+		function requestHeaderRingRefresh(sessionId) {
+			const now = Date.now();
+			if (sessionId === headerRingRefreshSession && now - headerRingRefreshAt < 10000) return;
+			headerRingRefreshSession = sessionId;
+			headerRingRefreshAt = now;
+			try {
+				const service = typeof headerRingSessions === "function" ? headerRingSessions() : null;
+				const refresh = service !== null && service !== undefined ? service.refreshProjections : undefined;
+				if (typeof refresh !== "function") return;
+				const result = refresh.call(service, sessionId);
+				if (result !== null && typeof result === "object" && typeof result.catch === "function") result.catch(() => {});
+			} catch { /* best effort: the next render is the fallback */ }
+		}
+
+		/** The rendered action button for the session on screen, or null. */
+		function headerRingButton() {
+			try {
+				const slots = document.querySelectorAll('[data-slot="conversation.session.header.actions"]');
+				if (slots === null || slots === undefined) return null;
+				for (const slot of slots) {
+					// The right sidebar keeps an embedded conversation MOUNTED while
+					// collapsed (hidden by CSS and `inert`), so its header actions must
+					// never be the anchor for the visible conversation's ring. Same guard
+					// as `conversationOnScreen` uses for the same duplicate.
+					if (typeof slot.closest === "function" && (slot.closest("[data-sidebar-right-panel]") !== null || slot.closest("[inert]") !== null)) continue;
+					if (typeof slot.querySelectorAll !== "function") continue;
+					for (const button of slot.querySelectorAll("button")) {
+						if (button.getAttribute("aria-haspopup") === "tree") return button;
+					}
+				}
+				return null;
+			} catch { return null; }
+		}
+
+		/** The count element: the LAST `<span>` direct child of that button. */
+		function headerRingCountElement(button) {
+			let found = null;
+			if (button === null || button === undefined || button.children === undefined) return null;
+			for (const child of button.children) {
+				if (child === null || child === undefined || child.tagName !== "SPAN") continue;
+				if (child.getAttribute(HEAD_RING_ATTR) !== null) continue;
+				found = child;
+			}
+			return found;
+		}
+
+		/**
+		 * Whether the decoration must stay off this conversation. A sub-agent's own
+		 * session renders no header row at all, so it must render no ring either.
+		 */
+		function headerRingSuppressed(list, sessionId) {
+			if (typeof sessionId !== "string" || sessionId === "") return true;
+			if (list === null || typeof list !== "object") return true;
+			const byId = list.byId !== null && typeof list.byId === "object" ? list.byId : {};
+			const entry = byId[sessionId];
+			// No row means the page cannot prove this is not a sub-agent's own
+			// conversation: suppress rather than draw on a page we cannot read.
+			if (entry === null || typeof entry !== "object") return true;
+			return entry.origin === "subagent";
+		}
+
+		/**
+		 * The effective number to draw. `-1` (no answer) and `0` both mean "draw
+		 * nothing"; the switch is the only other input. Pure, so the switch and the
+		 * zero case are testable without a DOM.
+		 */
+		function headerRingVisibleCount(config, count) {
+			const enabled = !(config !== null && typeof config === "object" && config.headerRing === false);
+			if (!enabled) return -1;
+			const value = Number(count);
+			return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+		}
+
+		/** Remove the ring and put the count element's own `position` back. */
+		function clearHeaderRing() {
+			try { document.querySelectorAll("[" + HEAD_RING_ATTR + "]").forEach((node) => node.remove()); } catch {}
+			if (headerRingHost !== null) {
+				try { headerRingHost.style.position = headerRingHostPosition; } catch {}
+				try { headerRingHost.removeAttribute(HEAD_RING_HOST_ATTR); } catch {}
+			}
+			headerRingHost = null;
+			headerRingHostPosition = "";
+			if (headerRingObserver !== null) {
+				try { headerRingObserver.disconnect(); } catch {}
+				headerRingObserver = null;
+			}
+			headerRingObserved = null;
+		}
+
+		/** Watch the header slot, so a re-render that dropped the ring gets it back. */
+		function observeHeaderRingAnchor(button) {
+			if (typeof window === "undefined" || window === null || typeof window.MutationObserver !== "function") return;
+			const slot = button !== null && typeof button.closest === "function" ? button.closest('[data-slot="conversation.session.header.actions"]') : null;
+			if (slot === null || slot === undefined || slot === headerRingObserved) return;
+			try {
+				if (headerRingObserver !== null) headerRingObserver.disconnect();
+				headerRingObserver = new window.MutationObserver(() => { repaintHeaderRing(); });
+				headerRingObserver.observe(slot, { childList: true, subtree: true, characterData: true });
+				headerRingObserved = slot;
+			} catch {
+				headerRingObserver = null;
+				headerRingObserved = null;
+			}
+		}
+
+		/** Re-run the current value; used by the observer, which has no arguments. */
+		function repaintHeaderRing() {
+			paintHeaderRing(runningConfig, headerRingValue);
+		}
+
+		/** Warn once, then give up for this page — the sidebar marks' exact posture. */
+		function noteHeaderRingFailure(why) {
+			headerRingFailures++;
+			if (headerRingFailures === 1) {
+				try { console.warn("dsh-icon-custom: 会话头部黄圈定位失败,已降级(不影响其他功能):", why); } catch {}
+				return;
+			}
+			if (headerRingFailures < HEAD_RING_MAX_FAILURES || headerRingGivenUp) return;
+			headerRingGivenUp = true;
+			try { console.warn("dsh-icon-custom: 会话头部黄圈连续失败,本次会话内已自动关闭。"); } catch {}
+			clearHeaderRing();
+		}
+
+		/**
+		 * Reconcile the ring with the current number. Idempotent (writes only what
+		 * differs) and quiet when the anchor is not on this page (a sub-agent's own
+		 * conversation, the landing view, a boot).
+		 * @param config - the running config, for the `headerRing` switch.
+		 * @param count - the ring's number, from `headerRingCount`; -1 hides it.
+		 */
+		function paintHeaderRing(config, count) {
+			if (headerRingGivenUp) return;
+			const value = headerRingVisibleCount(config, count);
+			if (value <= 0) { clearHeaderRing(); return; }
+			const button = headerRingButton();
+			// No anchor is not a failure: child sessions render no header row, and the
+			// page may simply be booting. Leave whatever is there alone and wait.
+			if (button === null) { clearHeaderRing(); return; }
+			const anchor = headerRingCountElement(button);
+			if (anchor === null) { noteHeaderRingFailure("找不到计数元素"); return; }
+			try {
+				if (headerRingHost !== anchor) {
+					clearHeaderRing();
+					headerRingHost = anchor;
+					headerRingHostPosition = anchor.style.position;
+					anchor.setAttribute(HEAD_RING_HOST_ATTR, "1");
+					if (window.getComputedStyle(anchor).position === "static") anchor.style.position = "relative";
+				}
+				observeHeaderRingAnchor(button);
+				let node = anchor.querySelector("[" + HEAD_RING_ATTR + "]");
+				if (node === null) {
+					node = document.createElement("span");
+					node.setAttribute(HEAD_RING_ATTR, "1");
+					// Not a control and never announced: the official button's own label
+					// already speaks the running count.
+					node.setAttribute("aria-hidden", "true");
+					// Looks like the sidebar workspace's red count: a rounded-square pill (never a
+					// full circle), with a dark number on the running yellow.
+					node.style.cssText = "position:absolute;pointer-events:none;top:-6px;right:-5px;display:inline-flex;"
+						+ "align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;box-sizing:border-box;"
+						+ "border-radius:6px;background:" + RUNNING_YELLOW + ";color:#1f2328;font:inherit;font-size:11px;"
+						+ "font-weight:600;line-height:16px;font-variant-numeric:tabular-nums;z-index:3;"
+						+ "box-shadow:0 0 0 1.5px var(--dsw-alias-bg-layer-1,#fff)";
+					anchor.appendChild(node);
+				}
+				const text = badgeLabel(value);
+				if (node.textContent !== text) node.textContent = text;
+				headerRingFailures = 0;
+			} catch (error) {
+				noteHeaderRingFailure(String((error && error.message) || error));
+			}
+		}
+		//#endregion
+
 		//#region components
 		/**
 		 * Headless occupant of the frame-wide `shell.overlay` slot. It reads DSH's
@@ -2886,6 +3305,21 @@ window.__ModuleLoader__.load({
 			const runningRowSignature = runningItemsSignature(runningRows);
 			const runningCount = runningIds.length;
 			React.useEffect(() => { emitRunningState(runningCount, runningRows); }, [runningRowSignature]);
+			// The conversation header's yellow ring: the session on screen, and ONLY
+			// its direct children from the official `subagentCatalog`. A separate
+			// number for a separate decoration — it never joins `runningIds`, so no
+			// sidebar, tab or OS-badge count can move because of it.
+			const ringSessionId = viewed.ids.length === 1 ? viewed.ids[0] : "";
+			const ringSuppressed = headerRingSuppressed(list, ringSessionId);
+			const ringCount = ringSuppressed ? -1 : headerRingCount(list, status, ringSessionId);
+			const ringSignature = ringSessionId + "\u0000" + ringCount;
+			React.useEffect(() => {
+				headerRingValue = ringCount;
+				// Not loaded yet is not "zero running": ask the host once, then let the
+				// next render answer. Without a session service this is a quiet no-op.
+				if (!ringSuppressed && !headerRingCatalogLoaded(list, ringSessionId)) requestHeaderRingRefresh(ringSessionId);
+				paintHeaderRing(runningConfig, headerRingValue);
+			}, [ringSignature, running.enabled, running.headerRing]);
 			// The session rows, for naming the running ones the way the sidebar shows
 			// them (`displayTitle`, the same fallback the red dots use).
 			React.useEffect(() => {
@@ -3463,6 +3897,229 @@ window.__ModuleLoader__.load({
 			}, children);
 		}
 
+		//#region hint disclosure
+		/**
+		 * Every long hint used to be printed in full on the settings page, which made
+		 * one screen a wall of grey small print. Now each one keeps a one-line
+		 * summary on the page and moves the full text behind a "?" button.
+		 *
+		 * The bubble's material is borrowed, its behaviour is ours:
+		 *  - the official `MenuSurface` primitive as the bubble container, when this
+		 *    build exposes it to plugins;
+		 *  - a self-drawn bubble carrying the same inline styling otherwise.
+		 * Opening and closing (click the "?", click it again, click away, Escape) is
+		 * the plugin's own code on BOTH paths, and placement stays in the pure
+		 * `hintBubblePlacement` below — `MenuSurface` only paints the surface, it
+		 * does not position or dismiss anything.
+		 *
+		 * Why not the official `Tooltip` (which is what this used to use): its
+		 * `label` is `string | (() => string)`
+		 * (`@deepseek-ai/dsh-client-ui-primitives/lib/types/Tooltip.d.ts:20`), so it
+		 * can only print plain text and can never render the emphasised phrases the
+		 * requirement asks for. `MenuSurface` takes arbitrary children
+		 * (`ComponentPropsWithoutRef<'div'>`), so the same self-managed disclosure
+		 * can render real React nodes — hence `**bold**` becomes a real `<strong>`.
+		 * See docs/adr/0012-hint-bubble-menusurface.md.
+		 *
+		 * The client half is loaded through the ModuleLoader's `require` with no build
+		 * step, so that package can be absent or not yet materialized — a `require`
+		 * miss must degrade to the fallback, never to a blank section.
+		 * Note: this package is resolved by the host at require time and is therefore
+		 * deliberately left out of `dsh.client.inject` and `peerDependencies`
+		 * (matching the official packages), so no injection gate can block mount.
+		 */
+		const HINT_BUBBLE_WIDTH = 320;
+		const HINT_BUBBLE_MARGIN = 8;
+		const HINT_BUBBLE_GAP = 6;
+		const HINT_ROW_STYLE = { display: "flex", alignItems: "flex-start", gap: "6px", marginTop: "4px" };
+		const HINT_SUMMARY_STYLE = { fontSize: 11, color: "var(--dsw-alias-label-tertiary)", lineHeight: "16px" };
+		const HINT_BUTTON_STYLE = { flex: "none", width: "16px", height: "16px", padding: 0, borderRadius: "50%", border: "1px solid var(--dsw-alias-border-l2)", background: "transparent", color: "var(--dsw-alias-label-tertiary)", fontSize: 11, lineHeight: "14px", textAlign: "center", cursor: "pointer" };
+		/** The emphasised run: a real `<strong>`, so `**` never reaches the screen. */
+		const HINT_STRONG_STYLE = { fontWeight: 600, color: "var(--dsw-alias-label-primary)" };
+		/** The fallback bubble carries its own material; the official surface paints its own. */
+		const HINT_BUBBLE_STYLE = { position: "fixed", zIndex: 70, padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--dsw-alias-border-l2)", background: "var(--dsw-alias-bg-layer-1)", boxShadow: "0 10px 30px rgba(0,0,0,.18)", color: "var(--dsw-alias-label-primary)", fontSize: 12, lineHeight: "18px", whiteSpace: "pre-wrap", maxHeight: "40vh", overflowY: "auto" };
+		/** Placement-only style for the official surface: no fill/border/radius of ours. */
+		const HINT_BUBBLE_PLACEMENT_STYLE = { position: "fixed", zIndex: 70, padding: "8px 10px", color: "var(--dsw-alias-label-primary)", fontSize: 12, lineHeight: "18px", whiteSpace: "pre-wrap", maxHeight: "40vh", overflowY: "auto" };
+
+		/**
+		 * Resolve the official MenuSurface lazily: requiring it at factory time can
+		 * run before the primitive is materialized, and a miss throws (the loader's
+		 * module table has no fallback entry). Success is memoized; a miss is retried
+		 * on the next render, so a plugin that boots before the primitive still picks
+		 * it up instead of being stuck on the fallback forever.
+		 * @returns the MenuSurface component, or null when this build does not expose it.
+		 */
+		let officialMenuSurface = null;
+		function officialHintSurface() {
+			if (officialMenuSurface !== null) return officialMenuSurface;
+			try {
+				const primitives = require("@deepseek-ai/dsh-client-ui-primitives");
+				// "Present" is the whole judgement, not "is a function": the shipped
+				// `MenuSurface` is a `forwardRef` object (`lib/index.js` builds it with
+				// `forwardRef(...)`, and its type is `ForwardRefExoticComponent`), so
+				// `typeof` is "object". The old `typeof === "function"` test therefore
+				// never matched in production and left the official branch dead. A build
+				// that exposes it as a plain function still works.
+				const candidate = primitives !== null && typeof primitives === "object" ? primitives.MenuSurface : undefined;
+				if (candidate !== null && candidate !== undefined
+					&& (typeof candidate === "function" || typeof candidate === "object")) {
+					officialMenuSurface = candidate;
+				}
+			} catch (error) {
+				officialMenuSurface = null;
+			}
+			return officialMenuSurface;
+		}
+
+		/**
+		 * Turn one hint string into React children, converting every BALANCED
+		 * `**pair**` into a real `<strong>`.
+		 *
+		 * Only a closed pair is markup: an unpaired `**` (or a lone marker) is kept
+		 * verbatim, because dropping the characters would silently lose text — worse
+		 * than showing the marker. The marker itself never reaches the screen for a
+		 * balanced pair: what lands in the DOM is `<strong>pair</strong>`.
+		 * @param text - the locale string, possibly carrying `**` runs.
+		 * @returns an array of strings and `<strong>` elements, never empty.
+		 */
+		function hintTextNodes(text) {
+			const source = typeof text === "string" ? text : "";
+			const nodes = [];
+			const bold = /\*\*([\s\S]+?)\*\*/g;
+			let last = 0;
+			let match;
+			while ((match = bold.exec(source)) !== null) {
+				if (match.index > last) nodes.push(source.slice(last, match.index));
+				nodes.push(React.createElement("strong", { key: "hint-bold-" + nodes.length, style: HINT_STRONG_STYLE }, match[1]));
+				last = match.index + match[0].length;
+			}
+			if (last < source.length) nodes.push(source.slice(last));
+			if (nodes.length === 0) nodes.push(source);
+			return nodes;
+		}
+
+		/**
+		 * Where the fallback bubble goes: just below the button's anchor rect, clamped
+		 * into the viewport. Pure, so the placement is testable without a DOM.
+		 * @param anchor - the button's client rect, or null.
+		 * @param viewportWidth - window width.
+		 * @param viewportHeight - window height.
+		 * @returns `{ left, top, width }` in viewport pixels.
+		 */
+		function hintBubblePlacement(anchor, viewportWidth, viewportHeight) {
+			const width = Math.min(HINT_BUBBLE_WIDTH, Math.max(120, viewportWidth - HINT_BUBBLE_MARGIN * 2));
+			const anchorLeft = anchor !== null && typeof anchor === "object" && typeof anchor.left === "number" ? anchor.left : HINT_BUBBLE_MARGIN;
+			const anchorBottom = anchor !== null && typeof anchor === "object" && typeof anchor.bottom === "number" ? anchor.bottom : HINT_BUBBLE_MARGIN;
+			const left = Math.max(HINT_BUBBLE_MARGIN, Math.min(anchorLeft, viewportWidth - width - HINT_BUBBLE_MARGIN));
+			const top = Math.max(HINT_BUBBLE_MARGIN, Math.min(anchorBottom + HINT_BUBBLE_GAP, viewportHeight - HINT_BUBBLE_MARGIN));
+			return { left: Math.round(left), top: Math.round(top), width: Math.round(width) };
+		}
+
+		/**
+		 * The bubble node for one disclosure: the official `MenuSurface` material when
+		 * `surface` is given, the self-drawn inline bubble otherwise. Pure, so both
+		 * paths are exercised without a DOM; closed renders nothing.
+		 *
+		 * `MenuSurface` is handed placement only (position/left/top/width/scroll) and
+		 * keeps its own fill, radius, border and blur; the fallback div carries the
+		 * whole look itself. `compact` asks the official surface for the smaller
+		 * radius a small bubble wants.
+		 * @param open - whether the bubble is showing.
+		 * @param surface - the official MenuSurface component, or null for the fallback.
+		 * @param label - accessible name for the dialog.
+		 * @param place - `{ left, top, width }` from `hintBubblePlacement`.
+		 * @param text - the full hint text, `**` markers included.
+		 * @returns the bubble element, or null while closed.
+		 */
+		function hintBubbleNode(open, surface, label, place, text) {
+			if (!open) return null;
+			const placement = { left: place.left + "px", top: place.top + "px", width: place.width + "px" };
+			const content = hintTextNodes(text);
+			if (surface === null) {
+				return React.createElement("div", {
+					"data-icon-custom-hint": "1",
+					role: "dialog",
+					"aria-label": label,
+					style: { ...HINT_BUBBLE_STYLE, ...placement }
+				}, ...content);
+			}
+			return React.createElement(surface, {
+				"data-icon-custom-hint": "1",
+				role: "dialog",
+				"aria-label": label,
+				compact: true,
+				style: { ...HINT_BUBBLE_PLACEMENT_STYLE, ...placement }
+			}, ...content);
+		}
+
+		/**
+		 * The button plus its bubble, with the open/close state managed here — the same
+		 * code on both paths, because the official surface only supplies material.
+		 * Opened by the "?", closed by the same button, an outside pointerdown, or
+		 * Escape. The button is the only way to open the text (hovering does not).
+		 */
+		function HintDisclosureBubble(props) {
+			const [rect, setRect] = React.useState(null);
+			const open = rect !== null;
+			React.useEffect(() => {
+				if (!open) return undefined;
+				const onKey = (event) => { if (event.key === "Escape") setRect(null); };
+				const onDown = (event) => {
+					const node = event.target;
+					if (node === null || typeof node.closest !== "function") return;
+					// Both surfaces carry this marker (MenuSurface forwards div props), so
+					// a click inside the bubble never counts as "clicked away".
+					if (node.closest('[data-icon-custom-hint="1"]') !== null) return;
+					if (node.closest('[data-icon-custom-hint-button="1"]') !== null) return;
+					setRect(null);
+				};
+				window.addEventListener("keydown", onKey);
+				document.addEventListener("mousedown", onDown, true);
+				return () => {
+					window.removeEventListener("keydown", onKey);
+					document.removeEventListener("mousedown", onDown, true);
+				};
+			}, [open]);
+			const toggle = (event) => {
+				if (open) {
+					setRect(null);
+					return;
+				}
+				const node = event.currentTarget;
+				setRect(node !== null && typeof node.getBoundingClientRect === "function" ? node.getBoundingClientRect() : null);
+			};
+			const place = hintBubblePlacement(rect, window.innerWidth, window.innerHeight);
+			const button = React.createElement("button", {
+				type: "button",
+				"aria-label": props.label,
+				title: props.label,
+				"data-icon-custom-hint-button": "1",
+				onClick: toggle,
+				style: HINT_BUTTON_STYLE
+			}, "?");
+			return React.createElement(React.Fragment, null,
+				button,
+				hintBubbleNode(open, props.surface, props.label, place, props.text)
+			);
+		}
+
+		/**
+		 * One hint row: the short summary (plain text, never folded) stays on the page,
+		 * the full text sits behind the "?" button. The official primitive is resolved
+		 * once per row and passed down; a missing package simply means `surface === null`.
+		 */
+		function HintDisclosure(props) {
+			return React.createElement("div", { style: HINT_ROW_STYLE },
+				React.createElement("span", { style: HINT_SUMMARY_STYLE }, props.summary),
+				React.createElement(HintDisclosureBubble, {
+					text: props.text,
+					label: props.label,
+					surface: officialHintSurface()
+				})
+			);
+		}
+		//#endregion
+
 		function FaviconSection(props) {
 			const t = props.t;
 			const rpc = props.rpc;
@@ -3579,7 +4236,7 @@ window.__ModuleLoader__.load({
 				// arrives — so a field missing HERE is a field that silently reverts to its
 				// default on the next page load, however well the local toggle worked.
 				rpc.call("/api", "iconCustom/setUnreadRule", {
-					args: { request: { reasons: next.reasons, pending: next.pending, workspaceDot: next.workspaceDot, appBadge: next.appBadge, clearDelaySec: next.clearDelaySec, revealOnOpen: next.revealOnOpen } }
+					args: { request: { reasons: next.reasons, pending: next.pending, workspaceDot: next.workspaceDot, appBadge: next.appBadge, clearDelaySec: next.clearDelaySec, revealOnOpen: next.revealOnOpen, unreadIncludeSubagents: next.unreadIncludeSubagents } }
 				}).catch(() => {});
 			}, [rpc]);
 			// Toggle one unread reason. Applies locally at once; the host keeps the
@@ -3599,6 +4256,12 @@ window.__ModuleLoader__.load({
 			const onRevealToggle = React.useCallback((checked) => {
 				saveUnreadRule({ revealOnOpen: checked });
 			}, [saveUnreadRule]);
+			// Whether a background sub-agent settling (which makes its parent run one
+			// more turn) is worth telling the person about. Same one save path, so the
+			// field cannot be dropped here and silently revert to ON after a reload.
+			const onIncludeSubagentsToggle = React.useCallback((checked) => {
+				saveUnreadRule({ unreadIncludeSubagents: checked });
+			}, [saveUnreadRule]);
 			// The system-icon projection of the same number. Saved through the same
 			// one save path, so this field can never be dropped by a caller.
 			const onAppBadgeToggle = React.useCallback((checked) => {
@@ -3610,12 +4273,24 @@ window.__ModuleLoader__.load({
 			const saveRunningRule = React.useCallback((patch) => {
 				const next = normalizeRunningConfig({ ...runningConfig, ...patch });
 				emitRunningConfig(next);
+				// Both switches travel together, always: the host record is one object, and
+				// a caller that remembered only one field would otherwise silently reset
+				// the other one on the next load.
 				rpc.call("/api", "iconCustom/setRunningRule", {
-					args: { request: { enabled: next.enabled } }
+					args: { request: { enabled: next.enabled, includeSubagents: next.includeSubagents, headerRing: next.headerRing } }
 				}).catch(() => {});
 			}, [rpc]);
 			const onRunningMarkToggle = React.useCallback((checked) => {
 				saveRunningRule({ enabled: checked });
+			}, [saveRunningRule]);
+			const onRunningIncludeSubagentsToggle = React.useCallback((checked) => {
+				saveRunningRule({ includeSubagents: checked });
+			}, [saveRunningRule]);
+			// Third switch of the same feature: the yellow ring on the conversation
+			// header's sub-agent count. Independent by construction — nothing on the
+			// sidebar, the tab icon or the OS badge reads it.
+			const onHeaderRingToggle = React.useCallback((checked) => {
+				saveRunningRule({ headerRing: checked });
 			}, [saveRunningRule]);
 			// Seconds you must stay in a session before it counts as read; 0 = as soon
 			// as you enter. Clamped by the shared normalizer, so a stray keystroke can
@@ -3783,6 +4458,15 @@ window.__ModuleLoader__.load({
 				hint: { fontSize: 11, color: "var(--dsw-alias-label-tertiary)", marginTop: "4px", lineHeight: "16px" }
 			};
 
+			// One disclosure row per long hint: the summary is on the page, the full
+			// text (and nothing else) sits behind the "?" button.
+			const hintLine = (hintKey) => React.createElement(HintDisclosure, {
+				key: hintKey,
+				summary: t(hintKey + "Summary"),
+				text: t(hintKey),
+				label: t("hintMoreLabel")
+			});
+
 			return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } },
 				React.createElement("div", { style: style.row },
 					React.createElement("div", { style: style.preview },
@@ -3808,13 +4492,13 @@ window.__ModuleLoader__.load({
 					React.createElement("input", { type: "checkbox", checked: pwaEnabled, disabled: busy || !active, onChange: onTogglePwa, style: { cursor: busy ? "default" : "pointer" } }),
 					React.createElement("span", null, t("pwa"))
 				),
-				React.createElement("div", { style: style.hint }, t("pwaHint")),
+				hintLine("pwaHint"),
 				React.createElement("label", { style: { display: "flex", alignItems: "center", gap: "8px", padding: "10px 0 0", fontSize: 12, color: "var(--dsw-alias-label-primary)", cursor: busy ? "default" : "pointer" } },
 					React.createElement("input", { type: "checkbox", checked: logoEnabled, disabled: busy || !active, onChange: onToggleLogo, style: { cursor: busy ? "default" : "pointer" } }),
 					React.createElement("span", null, t("logo"))
 				),
-				React.createElement("div", { style: style.hint }, t("logoHint")),
-				React.createElement("div", { style: style.hint }, t("uploadHint")),
+				hintLine("logoHint"),
+				hintLine("uploadHint"),
 				React.createElement("div", { style: style.hint }, t("resetHint")),
 				React.createElement("div", { style: { borderTop: "1px solid var(--dsw-alias-border-l2)", marginTop: "12px", paddingTop: "12px" } },
 					React.createElement("div", { style: style.label }, t("badgeTest")),
@@ -3851,13 +4535,25 @@ window.__ModuleLoader__.load({
 							style: { ...(badgeSizeValue === key ? style.btnPrimary : style.btn), padding: "4px 10px" }
 						}, t(key === "sm" ? "badgeSizeSmall" : key === "md" ? "badgeSizeMedium" : "badgeSizeLarge")))
 					),
-					React.createElement("div", { style: style.hint }, t("badgeSizeHint")),
+					hintLine("badgeSizeHint"),
 					React.createElement("div", { style: { marginTop: "12px" } },
 						React.createElement("div", { style: style.desc }, t("unreadReasonsLabel")),
 						React.createElement("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center" } },
 							["completed", "error", "blocked", "max-tokens", "interrupted", "aborted:user", "aborted:other"].map((key) => renderReasonCheckbox(key, REASON_LABEL_KEYS[key])),
 							renderReasonCheckbox("pending", "reasonPending")
 						)
+					),
+					React.createElement("div", { style: { marginTop: "10px" } },
+						React.createElement("label", { style: { display: "inline-flex", alignItems: "center", gap: "6px", fontSize: 12, color: "var(--dsw-alias-label-primary)", cursor: "pointer" } },
+							React.createElement("input", {
+								type: "checkbox",
+								checked: unread.unreadIncludeSubagents !== false,
+								onChange: (event) => onIncludeSubagentsToggle(event.target.checked === true),
+								"aria-label": t("unreadIncludeSubagentsLabel")
+							}),
+							React.createElement("span", null, t("unreadIncludeSubagentsLabel"))
+						),
+						hintLine("unreadIncludeSubagentsHint")
 					),
 					React.createElement("div", { style: { marginTop: "12px" } },
 						React.createElement("div", { style: style.desc }, t("clearDelayLabel")),
@@ -3873,7 +4569,7 @@ window.__ModuleLoader__.load({
 							}),
 							React.createElement("span", null, t("clearDelayUnit"))
 						),
-						React.createElement("div", { style: style.hint }, t("clearDelayHint"))
+						hintLine("clearDelayHint")
 					),
 					React.createElement("div", { style: { marginTop: "10px" } },
 						React.createElement("label", { style: { display: "inline-flex", alignItems: "center", gap: "6px", fontSize: 12, color: "var(--dsw-alias-label-primary)", cursor: "pointer" } },
@@ -3884,7 +4580,7 @@ window.__ModuleLoader__.load({
 							}),
 							React.createElement("span", null, t("workspaceDotLabel"))
 						),
-						React.createElement("div", { style: style.hint }, t("workspaceDotHint"))
+						hintLine("workspaceDotHint")
 					),
 					React.createElement("div", { style: { marginTop: "10px" } },
 						React.createElement("label", { style: { display: "inline-flex", alignItems: "center", gap: "6px", fontSize: 12, color: "var(--dsw-alias-label-primary)", cursor: "pointer" } },
@@ -3895,7 +4591,7 @@ window.__ModuleLoader__.load({
 							}),
 							React.createElement("span", null, t("revealLabel"))
 						),
-						React.createElement("div", { style: style.hint }, t("revealHint"))
+						hintLine("revealHint")
 					),
 					React.createElement("div", { style: { marginTop: "10px" } },
 						React.createElement("label", { style: { display: "inline-flex", alignItems: "center", gap: "6px", fontSize: 12, color: "var(--dsw-alias-label-primary)", cursor: "pointer" } },
@@ -3906,7 +4602,7 @@ window.__ModuleLoader__.load({
 							}),
 							React.createElement("span", null, t("appBadgeLabel"))
 						),
-						React.createElement("div", { style: style.hint }, t("appBadgeHint")),
+						hintLine("appBadgeHint"),
 						// What THIS device is — never a claim about the platform.
 						React.createElement("div", { style: style.hint }, t(appBadgeCapabilityKey(appBadgeProbe))),
 						// The WebKit precondition as a live local fact, plus the one
@@ -3922,10 +4618,10 @@ window.__ModuleLoader__.load({
 								}, t("notificationPermissionButton"))
 								: null
 						),
-						React.createElement("div", { style: style.hint }, t("notificationPermissionHint")),
+						hintLine("notificationPermissionHint"),
 						React.createElement("div", { style: style.hint }, t("appBadgeFootnote"))
 					),
-					React.createElement("div", { style: style.hint }, t("badgeTestHint"))
+					hintLine("badgeTestHint")
 				),
 				// A second, independent feature in its own block: same settings page,
 				// same save discipline, different fact.
@@ -3940,7 +4636,34 @@ window.__ModuleLoader__.load({
 							}),
 							React.createElement("span", null, t("runningMarkLabel"))
 						),
-						React.createElement("div", { style: style.hint }, t("runningMarkHint"))
+						hintLine("runningMarkHint"),
+						// The second switch of the same feature: still no host fact, only a
+						// counting rule. Nested under the first one because it only matters
+						// while the marks themselves are on.
+						React.createElement("div", { style: { marginTop: "6px" } },
+							React.createElement("label", { style: { display: "inline-flex", alignItems: "center", gap: "6px", fontSize: 12, color: "var(--dsw-alias-label-primary)", cursor: "pointer" } },
+								React.createElement("input", {
+									type: "checkbox",
+									checked: running.includeSubagents !== false,
+									onChange: (event) => onRunningIncludeSubagentsToggle(event.target.checked === true)
+								}),
+								React.createElement("span", null, t("runningIncludeSubagentsLabel"))
+							),
+							hintLine("runningIncludeSubagentsHint")
+						),
+						// The third switch of the same feature: one decoration on the
+						// conversation header, independent of every count above.
+						React.createElement("div", { style: { marginTop: "6px" } },
+							React.createElement("label", { style: { display: "inline-flex", alignItems: "center", gap: "6px", fontSize: 12, color: "var(--dsw-alias-label-primary)", cursor: "pointer" } },
+								React.createElement("input", {
+									type: "checkbox",
+									checked: running.headerRing !== false,
+									onChange: (event) => onHeaderRingToggle(event.target.checked === true)
+								}),
+								React.createElement("span", null, t("headerRingLabel"))
+							),
+							hintLine("headerRingHint")
+						)
 					)
 				),
 				notice ? React.createElement("div", { style: style.notice }, notice) : null,
@@ -3972,6 +4695,13 @@ window.__ModuleLoader__.load({
 					const key = value !== null && typeof value === "object" ? value.key : undefined;
 					return typeof key === "string" && key !== "" ? key : undefined;
 				} catch { return undefined; }
+			};
+			// The sessions service, looked up lazily for the same reason as the binding
+			// above: it is only needed to nudge the host when a session's
+			// `subagentCatalog` projection has not been folded yet, and a build without
+			// it simply waits for the next render (see `requestHeaderRingRefresh`).
+			headerRingSessions = () => {
+				try { return ctx.get("sessions"); } catch { return null; }
 			};
 			// Pull the host state once, so the brand mark and the badge are correct
 			// before the settings section is ever opened. The unread rule rides its
@@ -4168,6 +4898,9 @@ window.__ModuleLoader__.load({
 						// Same region, same watchdog: the section-header badge is
 						// re-injected whenever the shipped UI re-renders over it.
 						paintHeaderBadge();
+						// And the conversation header's ring, which lives outside this
+						// container: any churn nearby is a fair moment to reconcile it.
+						paintHeaderRing(runningConfig, headerRingValue);
 					}, 200);
 				};
 				const attach = () => {
@@ -4201,6 +4934,7 @@ window.__ModuleLoader__.load({
 					offRunning();
 					clearWorkspaceDots();
 					clearHeaderBadge();
+					clearHeaderRing();
 					// The one highlight this plugin ever puts on a SHIPPED row: it must not
 					// outlive the plugin, even if the unload lands inside its flash window.
 					clearRevealFlash();

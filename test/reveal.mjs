@@ -241,7 +241,7 @@ console.log('— 接线:开关、传参、卸载清理,一个都不能漏 —')
 		)
 		save({ revealOnOpen: false })
 		eq('关掉开关时,发给宿主的那份带着 revealOnOpen=false', sent.length === 1 ? sent[0].revealOnOpen : 'no-call', false)
-		eq('其它字段照旧一起发(宿主是整份替换,不是打补丁)', sent.length === 1 ? Object.keys(sent[0]).sort().join(',') : 'no-call', 'appBadge,clearDelaySec,pending,reasons,revealOnOpen,workspaceDot')
+		eq('其它字段照旧一起发(宿主是整份替换,不是打补丁)', sent.length === 1 ? Object.keys(sent[0]).sort().join(',') : 'no-call', 'appBadge,clearDelaySec,pending,reasons,revealOnOpen,unreadIncludeSubagents,workspaceDot')
 	}
 }
 

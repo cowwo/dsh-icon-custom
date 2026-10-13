@@ -6,7 +6,7 @@
   "main": "lib/index.js",
   "license": "MIT",
   "scripts": {
-    "test": "node test/app-badge.mjs && node test/notification-permission.mjs && node test/unread-panel.mjs && node test/unread-clear.mjs && node test/unread-rows.mjs && node test/unread-seen.mjs && node test/unread-host-sync.mjs && node test/running-mark.mjs && node test/running-panel.mjs && node test/reveal.mjs"
+    "test": "node test/app-badge.mjs && node test/notification-permission.mjs && node test/unread-panel.mjs && node test/unread-clear.mjs && node test/unread-rows.mjs && node test/unread-seen.mjs && node test/unread-host-sync.mjs && node test/running-mark.mjs && node test/running-panel.mjs && node test/running-subagents.mjs && node test/header-ring.mjs && node test/unread-subagents.mjs && node test/reveal.mjs && node test/reveal-persist.mjs && node test/hint-disclosure.mjs"
   },
   "dependencies": {
     "jimp": "^1.6.1",
