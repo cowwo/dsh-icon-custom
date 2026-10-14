@@ -313,13 +313,20 @@ window.__ModuleLoader__.load({
 			// page should show. A cached/proxied page, a stale HTML rewrite, or a
 			// browser extension can all leave the wrong link behind; this makes the
 			// client authoritative about the icon it composites onto.
+			const previousHref = desiredIconHref();
 			iconState = {
 				active: known && status.active === true,
 				rev: known && typeof status.rev === "string" && status.rev !== "" ? status.rev : null,
 				png: known && status.png === true,
 				mime: known && typeof status.mime === "string" ? status.mime : null
 			};
-			reconcileFavicon();
+			// A different base image must be rebuilt from the NEW artwork right now:
+			// the ordinary reconcile is not enough, because a compose already in flight
+			// would land carrying the old base and nothing would touch the icon again
+			// until the next 5-second watchdog tick. Same move the settings page makes
+			// after an upload (`refreshFaviconBase`).
+			if (desiredIconHref() !== previousHref) refreshFaviconBase();
+			else reconcileFavicon();
 		}
 
 		//#endregion
@@ -916,8 +923,20 @@ window.__ModuleLoader__.load({
 					// saying they do not want this class of news at all.
 					if (!includeSubagents && value.subagentCaused === true) continue;
 					const endAt = typeof value.endAt === "number" ? value.endAt : 0;
-					const seenAt = marks[id];
-					if (endAt <= 0 || typeof seenAt !== "number" || endAt <= seenAt) continue;
+					// No watermark is the NORMAL first sight of a session: `ensureSeenBaseline`
+					// writes one from an effect AFTER this render, so skipping the row here
+					// would report 0 on the one frame the user actually sees — and the page
+					// would keep that 0 for its whole life (the baseline write pushed no
+					// re-render, so nothing recomputed it).
+					// Fall back to EXACTLY the value that effect writes — this browser's last
+					// time here (`seenBootAt`), or the Host's now when it has none — so the
+					// first frame and the write agree and the number cannot flicker.
+					// Guarded with `typeof` so a regression test may lift this function out
+					// of the module: an absent mirror simply means "no baseline".
+					const seenAt = typeof marks[id] === "number"
+						? marks[id]
+						: (typeof seenBootAt === "number" && seenBootAt > 0 ? seenBootAt : (typeof hostNow === "function" ? hostNow() : Date.now()));
+					if (endAt <= 0 || endAt <= seenAt) continue;
 					// Unknown reasons (a newer DSH adds one) stay hidden until the user
 					// turns them on, so a vocabulary growth can never surprise the badge.
 					// A reason the user turned OFF behaves the same way — with ONE
@@ -1623,6 +1642,45 @@ window.__ModuleLoader__.load({
 		let faviconPendingSignature = "";
 		/** Whether the last compose failed: the watchdog must retry instead of trusting the DOM. */
 		let faviconFailed = false;
+		/**
+		 * Short backoff after a failed compose: 300 ms → 1 s → 2 s, then the 5-second
+		 * watchdog owns it.
+		 *
+		 * The watchdog alone is too slow to feel like "the tab icon follows the
+		 * number": a base image that is merely SLOW (a cold cache, a proxy waking up, a
+		 * laptop resuming) left the badge missing for up to five seconds after a reload
+		 * — and a reload is exactly when the number is freshest. Three quick attempts
+		 * cover that window; a genuinely missing icon still falls through to the
+		 * watchdog, which keeps warning once per reason. Any success resets the ladder.
+		 */
+		const FAVICON_RETRY_DELAYS_MS = [300, 1000, 2000];
+		let faviconRetryTimer = 0;
+		let faviconRetryStep = 0;
+		function clearFaviconRetry() {
+			if (faviconRetryTimer === 0) return;
+			window.clearTimeout(faviconRetryTimer);
+			faviconRetryTimer = 0;
+		}
+		/**
+		 * Queue one retry of the compose that just failed.
+		 *
+		 * At most one timer is ever pending, and the ladder stops after the last rung
+		 * (the 5-second watchdog is the safety net below it). The callback re-checks
+		 * `faviconFailed`: a compose that already succeeded, or the teardown that
+		 * restored the shipped icons, has cleared it — and rebuilding then would paint
+		 * a number back onto a page that was deliberately left alone.
+		 */
+		function scheduleFaviconRetry() {
+			if (faviconRetryTimer !== 0) return;
+			if (faviconRetryStep >= FAVICON_RETRY_DELAYS_MS.length) return;
+			const delay = FAVICON_RETRY_DELAYS_MS[faviconRetryStep];
+			faviconRetryStep++;
+			faviconRetryTimer = window.setTimeout(() => {
+				faviconRetryTimer = 0;
+				if (faviconFailed !== true) return; // already repaired, or torn down
+				composeFavicon(effectiveCount(), badgeSize, true);
+			}, delay);
+		}
 		/** Which icon the plugin considers current (filled from the status RPC). */
 		let iconState = { active: false, rev: null, png: false, mime: null };
 		/** The icon URL this page SHOULD be showing, per the plugin's own status. */
@@ -1929,7 +1987,17 @@ window.__ModuleLoader__.load({
 			if (signature === faviconPendingSignature) return; // this very picture is being fetched
 			if (force !== true && signature === faviconDrawnSignature && faviconFailed !== true) return; // already on the tab
 			try {
-				Promise.resolve(applyBadgeToFavicon(count, size)).catch(warnFaviconCompose);
+				Promise.resolve(applyBadgeToFavicon(count, size)).then(
+					() => {
+						// The compose reports its own failure through `faviconFailed` (it never
+						// rejects), so this is where one becomes a SHORT retry instead of a
+						// wait for the next watchdog tick. A good compose resets the ladder.
+						if (faviconFailed === true) { scheduleFaviconRetry(); return; }
+						faviconRetryStep = 0;
+						clearFaviconRetry();
+					},
+					(error) => { warnFaviconCompose(error); }
+				);
 			} catch (error) {
 				// An `async` callee never throws synchronously, so this arm is dead TODAY —
 				// it is here so a future refactor (an early-returning sync path) cannot
@@ -3133,6 +3201,10 @@ window.__ModuleLoader__.load({
 				if (!ensureSeenBaseline(ids)) return;
 				pruneSeenState();
 				saveSeenState();
+				// The watermark moved under a render that was already counted without it:
+				// repaint in the same breath, exactly like the Host-merge path below, so
+				// nothing on screen can keep a number the new baseline already answers.
+				emitUnreadPoke();
 			}, [list]);
 			// What the page says about the screen, refreshed on the two moments that can
 			// change it without the session list changing: a global panel replacing the
